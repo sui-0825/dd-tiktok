@@ -2304,6 +2304,18 @@ button:active,.status-card-link:active,.row[onclick]:active,.suggestitem:active{
     <div class="bank-chip"></div>
   </div>
   <div class="bank-ticker" aria-hidden="true"><span>PAYPAY PROFIT</span><i>◆</i><span>COMMUNICATION COST</span><i>◆</i><span>FINAL BALANCE</span></div>
+  <div class="other-menu-grid">
+    <button class="other-menu-card" type="button" onclick="go('settings')">
+      <span class="other-menu-icon">⚙️</span>
+      <span><b>収支設定</b><small>月の通信費・月目標・総合初期投資</small></span>
+      <i>›</i>
+    </button>
+    <button class="other-menu-card admin-link" type="button" onclick="openAdminPage()">
+      <span class="other-menu-icon">👑</span>
+      <span><b>管理者ページ</b><small>利用者承認・バックアップ・データ削除</small></span>
+      <i>›</i>
+    </button>
+  </div>
   <div class="tabs">
     <button class="tab active" onclick="setReportMode('monthly',this)">月別推移</button>
     <button class="tab" onclick="setReportMode('yearly',this)">年間推移</button>
@@ -2373,7 +2385,7 @@ button:active,.status-card-link:active,.row[onclick]:active,.suggestitem:active{
 </section>
 
 <section id="settings" class="screen">
-  <div class="topbar"><button class="iconbtn" onclick="go('home')">‹</button><div class="title">設定</div><div></div></div>
+  <div class="topbar"><button class="iconbtn" onclick="go('history')">‹</button><div class="title">収支設定</div><div></div></div>
 
   <div class="sectiontitle"><h2>収支設定</h2></div>
   <div class="card settings-card">
@@ -4234,7 +4246,7 @@ function saveDeletePin(){
 }
 function resetAll(){
  db.security=db.security||{};
- if(!db.security.deletePinHash){toast('先に削除用暗証番号を設定してください');go('settings');setTimeout(()=>document.getElementById('newDeletePin')?.focus(),200);return}
+ if(!db.security.deletePinHash){toast('先に削除用暗証番号を設定してください');go('admin');setTimeout(()=>document.getElementById('newDeletePin')?.focus(),200);return}
  const o=document.getElementById('deletePinOverlay'),i=document.getElementById('deletePinInput'),e=document.getElementById('deletePinError');
  if(e)e.textContent='';if(i)i.value='';o.classList.add('show');o.setAttribute('aria-hidden','false');setTimeout(()=>i?.focus(),120);
 }
@@ -4695,6 +4707,16 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 <style id="v141-cloud-style">
 #cloudStatusPill{position:fixed;right:10px;top:74px;z-index:9998;border:1px solid #d8c27b;background:rgba(255,252,241,.96);color:#183a52;border-radius:999px;padding:5px 9px;font:700 10px/1.2 system-ui;box-shadow:0 4px 14px rgba(0,0,0,.10);max-width:calc(100vw - 20px);transition:opacity .25s ease,transform .25s ease;white-space:nowrap}#cloudStatusPill.dd-cloud-hide{opacity:0;transform:translateY(-8px);pointer-events:none}
 #cloudStatusPill[data-mode="cloud"]{background:#eafaf1;color:#17633a}#cloudStatusPill[data-mode="error"]{background:#fff0f0;color:#9a2c2c}
+
+/* ===== Ver17.1 その他メニュー：設定と管理者を分離 ===== */
+.other-menu-grid{display:grid;grid-template-columns:1fr;gap:10px;margin:14px 18px 16px}
+.other-menu-card{width:100%;border:1px solid rgba(34,64,87,.12);background:rgba(255,255,255,.86);border-radius:20px;padding:15px 16px;display:grid;grid-template-columns:44px 1fr 18px;align-items:center;gap:10px;text-align:left;box-shadow:0 7px 20px rgba(40,49,56,.06);color:var(--ink)}
+.other-menu-card .other-menu-icon{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:#eef3ea;font-size:22px}
+.other-menu-card.admin-link .other-menu-icon{background:#eef2f7}
+.other-menu-card span:nth-child(2){display:flex;flex-direction:column;gap:3px}
+.other-menu-card b{font-size:16px}
+.other-menu-card small{font-size:12px;color:var(--muted);line-height:1.45}
+.other-menu-card i{font-style:normal;font-size:25px;color:#9a8250;text-align:right}
 </style>
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
