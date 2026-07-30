@@ -11,7 +11,6 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
-<link rel="icon" href="./app-icon.svg" type="image/svg+xml">
 
 <title>D&D❀TikTok</title>
 <style>
@@ -2114,8 +2113,6 @@ button:active,.status-card-link:active,.row[onclick]:active,.suggestitem:active{
 
 
 <style>
-.owner-emergency-btn{display:block!important;width:100%!important;margin-top:14px!important;background:linear-gradient(135deg,#183e55,#0b2434)!important;color:#fff!important;border:1px solid rgba(219,183,83,.75)!important;box-shadow:0 10px 24px rgba(8,31,45,.24)!important;font-size:15px!important;padding:14px!important}
-html[data-owner-recovered="1"] #accessGate{display:none!important}
 </style>
 </head>
 <body>
@@ -2371,20 +2368,16 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
       <i>›</i>
     </button>
     <button class="gear-menu-option admin-option" type="button" onclick="closeGearMenu();openAdminPage()">
-      <span class="gear-menu-option-icon">👑</span>
-      <span><b>管理者ページ</b><small>利用者承認・バックアップ・データ削除</small></span>
+      <span class="gear-menu-option-icon">🗂️</span>
+      <span><b>データ管理</b><small>バックアップ・復元・全データ削除</small></span>
       <i>›</i>
     </button>
   </div>
 </div>
 
 <section id="admin" class="screen">
-  <div class="topbar"><button class="iconbtn" onclick="go('history')">‹</button><div class="title">管理者ページ</div><button class="iconbtn" onclick="renderAdminPage()">↻</button></div>
-  <div class="admin-hero"><div><small>D&amp;D❀TikTok ADMIN</small><h2>管理者ページ</h2><p id="adminIdentity">権限を確認しています…</p></div><span>👑</span></div>
-  <div class="admin-summary-grid"><div><small>承認待ち</small><b id="adminPendingCount">0</b></div><div><small>承認済み</small><b id="adminApprovedCount">0</b></div><div><small>停止中</small><b id="adminSuspendedCount">0</b></div></div>
-  <div class="sectiontitle"><h2>利用者管理</h2><span class="count-pill" id="adminMemberCount">0人</span></div>
-  <div id="adminMemberList" class="admin-member-list"><div class="empty">読み込み中…</div></div>
-  
+  <div class="topbar"><button class="iconbtn" onclick="go('history')">‹</button><div class="title">データ管理</div><div></div></div>
+  <div class="admin-hero"><div><small>D&amp;D❀TikTok DATA</small><h2>データ管理</h2><p>バックアップ・復元・削除を行います。</p></div><span>🗂️</span></div>
   <div class="sectiontitle"><h2>データ保護</h2></div>
   <div class="card settings-card">
     <button class="secondary" onclick="exportBackup()">JSONバックアップを書き出す</button>
@@ -2763,34 +2756,6 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
 </div>
 
 
-<div id="accessGate" class="access-gate hotel-access" aria-live="polite">
-  <div class="hotel-sparkles" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
-  <div class="access-card hotel-card">
-    <div class="hotel-crest">♛</div>
-    <small class="hotel-brand">D&amp;D GRAND HOTEL</small>
-    <div class="hotel-bell" id="hotelBell" aria-hidden="true">🛎️</div>
-    <h2 id="accessGateTitle">チェックイン手続き中</h2>
-    <p id="accessGateText">オーナーがお部屋をご用意しています。<br>ラウンジでごゆっくりお待ちください。</p>
-    <div class="hotel-status" id="hotelStatus"><span></span>CHECKING IN...</div>
-    <button id="accessRetryBtn" type="button" onclick="retryAccessCheck()">チェックイン状況を確認</button>
-    <button id="ownerEmergencyBtn" class="owner-emergency-btn" type="button" onclick="openOwnerPin()">👑 オーナー暗証番号で入室</button>
-    <div style="margin-top:8px;font-size:11px;color:#a58a45;letter-spacing:.08em">Ver18.2</div>
-    <div id="ownerPinPanel" class="owner-pin-panel" hidden>
-      <small>OWNER ACCESS</small>
-      <b>4桁の暗証番号</b>
-      <input id="ownerPinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••">
-      <div id="ownerPinError" class="owner-pin-error"></div>
-      <div class="owner-pin-actions"><button type="button" onclick="closeOwnerPin()">戻る</button><button type="button" onclick="submitOwnerPin()">入室する</button></div>
-    </div>
-  </div>
-  <div id="hotelWelcome" class="hotel-welcome" aria-hidden="true">
-    <div class="door-stage">
-      <div class="door-glow"></div>
-      <div class="door-frame"><div class="door door-left"><i></i></div><div class="door door-right"><i></i></div></div>
-    </div>
-    <div class="welcome-copy"><small>CHECK IN COMPLETE</small><h2>WELCOME</h2><p><b id="welcomeGuestName">ゲスト</b>様<br>お部屋の準備が整いました。</p><button type="button" onclick="finishHotelWelcome()">ホームへ進む</button></div>
-  </div>
-</div>
 
 <nav id="nav" class="nav">
   <button data-page="home" class="active" onclick="go('home')"><b>⌂</b>ホーム</button>
@@ -4767,46 +4732,13 @@ window.addEventListener('DOMContentLoaded',()=>{
 .owner-emergency-btn{margin-top:12px!important;background:transparent!important;color:#8b6c17!important;border:1px solid rgba(201,160,43,.45)!important;box-shadow:none!important}.owner-pin-panel{margin-top:14px;padding:16px;border-radius:18px;background:#fffaf0;border:1px solid #ead9a4}.owner-pin-panel[hidden]{display:none}.owner-pin-panel small{color:#a3832d;letter-spacing:.16em}.owner-pin-panel b{display:block;margin:7px 0 10px;color:#173c55}.owner-pin-panel input{width:150px;text-align:center;font-size:28px;letter-spacing:.35em;padding:10px;border:1px solid #d9c37d;border-radius:13px;background:#fff;outline:none}.owner-pin-error{min-height:20px;margin-top:8px;color:#a33;font-size:12px;font-weight:700}.owner-pin-actions{display:flex;gap:8px;justify-content:center;margin-top:8px}.owner-pin-actions button{min-width:105px}.owner-pin-actions button:first-child{background:#edf1f3;color:#345}.owner-pin-actions button:last-child{background:linear-gradient(135deg,#bf8b13,#efd36b);color:#fff}
 </style>
 <script id="v170-admin-script">
-let ddAccessState={accessStatus:'unknown',role:''},ddPreviousAccessStatus='unknown',hotelWelcomeTimer=null;
-try{if(localStorage.getItem('dd_owner_emergency_unlock_v1')==='1'||localStorage.getItem('dd_owner_role_permanent_v18')==='owner'){ddAccessState={accessStatus:'approved',role:'owner'};document.documentElement.dataset.ownerRecovered='1'}}catch(_){}
-function accessLabel(s){return s==='pending'?'チェックイン待ち':s==='approved'?'チェックイン済み':s==='suspended'?'チェックアウト':s==='rejected'?'入館不可':'確認中'}
-function showAccessGate(title,text,retry=true,mode='pending'){const g=document.getElementById('accessGate');if(!g)return;g.dataset.mode=mode;document.getElementById('accessGateTitle').textContent=title;document.getElementById('accessGateText').innerHTML=text;document.getElementById('accessRetryBtn').hidden=!retry;document.getElementById('hotelStatus').style.display=mode==='pending'?'inline-flex':'none';document.getElementById('hotelBell').textContent=mode==='pending'?'🛎️':mode==='suspended'?'🚪':'🏨';g.classList.add('show')}
-function hideAccessGate(){document.getElementById('accessGate')?.classList.remove('show');document.getElementById('hotelWelcome')?.classList.remove('show')}
-function openOwnerPin(){const p=document.getElementById('ownerPinPanel'),i=document.getElementById('ownerPinInput'),e=document.getElementById('ownerPinError');if(!p)return;p.hidden=false;if(e)e.textContent='';if(i){i.value='';setTimeout(()=>i.focus(),80)}}
-function closeOwnerPin(){const p=document.getElementById('ownerPinPanel');if(p)p.hidden=true}
-async function submitOwnerPin(){
- const i=document.getElementById('ownerPinInput'),e=document.getElementById('ownerPinError');
- const pin=String(i?.value||'');
- if(!/^\d{4}$/.test(pin)){if(e)e.textContent='4桁の数字を入力してください';return}
- if(e)e.textContent='確認しています…';
- try{
-  // Ver18: クラウド状態に関係なく、正しい暗証番号なら先にこの端末を復旧する。
-  const data=new TextEncoder().encode(pin);
-  const digest=await crypto.subtle.digest('SHA-256',data);
-  const hash=[...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
-  if(hash!=='1b5dae7d0665b854991304a139eeb289021414897e69631761639958fc30a7bd')throw new Error('暗証番号が違います');
-  localStorage.setItem('dd_owner_emergency_unlock_v1','1');
-  localStorage.setItem('dd_owner_role_permanent_v18','owner');
-  try{await window.DDCloud?.ownerEmergencyUnlock(pin)}catch(cloudErr){console.warn('クラウド側の権限復旧は後で再試行します',cloudErr)}
-  if(window.DDCloud?.state){window.DDCloud.state.role='owner';window.DDCloud.state.accessStatus='approved'}
-  ddAccessState={...(ddAccessState||{}),role:'owner',accessStatus:'approved'};
-  if(e)e.textContent='';closeOwnerPin();hideAccessGate();toast('👑 オーナーとして復旧しました');go('home');
- }catch(err){if(e)e.textContent=err.message||'入室できませんでした';if(i){i.value='';i.focus()}}
-}
-
-function playHotelWelcome(){const g=document.getElementById('accessGate'),w=document.getElementById('hotelWelcome');if(!g||!w){hideAccessGate();return}const name=String(db.currentUser||localStorage.getItem('dd_tiktok_local_user_v1')||'ゲスト').trim();document.getElementById('welcomeGuestName').textContent=name||'ゲスト';g.classList.add('show');w.classList.add('show');w.setAttribute('aria-hidden','false');clearTimeout(hotelWelcomeTimer);hotelWelcomeTimer=setTimeout(finishHotelWelcome,5200)}
-function finishHotelWelcome(){clearTimeout(hotelWelcomeTimer);document.getElementById('hotelWelcome')?.classList.remove('show');hideAccessGate();go('home')}
-async function retryAccessCheck(){try{const name=String(localStorage.getItem('dd_tiktok_local_user_v1')||'').trim();if(!name){hideAccessGate();showFirstLogin();return}showAccessGate('チェックイン状況を確認中','フロントへ確認しています。少々お待ちください。',false);await window.DDCloud?.requestAccess(name)}catch(e){showAccessGate('確認できませんでした',`${esc(e.message||'通信状態を確認してください')}<br>もう一度お試しください。`,true,'error') }}
-window.addEventListener('dd-access-state',e=>{ddAccessState=e.detail||{};let ownerRecovered=false;try{ownerRecovered=localStorage.getItem('dd_owner_emergency_unlock_v1')==='1'||localStorage.getItem('dd_owner_role_permanent_v18')==='owner'}catch(_){}if(ownerRecovered){ddAccessState.role='owner';ddAccessState.accessStatus='approved';hideAccessGate();ddPreviousAccessStatus='approved';return}const s=ddAccessState.accessStatus;const becameApproved=s==='approved'&&ddPreviousAccessStatus==='pending';if(s==='approved'){if(becameApproved)playHotelWelcome();else hideAccessGate()}else if(s==='pending'){showAccessGate('チェックイン手続き中','オーナーがお部屋をご用意しています。<br>ラウンジでごゆっくりお待ちください。',true,'pending')}else if(s==='suspended'){showAccessGate('CHECK OUT','ご利用ありがとうございました。<br>再度ご利用の際はオーナーへお声がけください。',false,'suspended')}else if(s==='rejected'){showAccessGate('ご案内できませんでした','今回はチェックインを承認できませんでした。<br>オーナーへお問い合わせください。',false,'rejected')}ddPreviousAccessStatus=s;});
-const _completeFirstLoginV17=window.completeFirstLogin;window.completeFirstLogin=function(){_completeFirstLoginV17.apply(this,arguments);const name=String(localStorage.getItem('dd_tiktok_local_user_v1')||'').trim();if(name){showAccessGate('チェックイン手続き中','フロントへ利用申請を送っています。<br>少々お待ちください。',false,'pending');setTimeout(()=>window.DDCloud?.requestAccess(name).catch(e=>showAccessGate('チェックインできませんでした',esc(e.message||'通信状態を確認してください'),true,'error')),250)}};
-
 function openGearMenu(){document.getElementById('gearMenuBackdrop')?.classList.add('show');document.body.style.overflow='hidden'}
 function closeGearMenu(ev){if(ev && ev.target!==ev.currentTarget)return;document.getElementById('gearMenuBackdrop')?.classList.remove('show');document.body.style.overflow=''}
 window.addEventListener('keydown',e=>{if(e.key==='Escape')closeGearMenu()});
 
-function openAdminPage(){const s=window.DDCloud?.state||{};if(!['owner','admin'].includes(s.role)){toast(s.accessStatus==='approved'?'管理者のみ開けます':'承認後に利用できます');return}go('admin');renderAdminPage()}
-async function renderAdminPage(){const root=document.getElementById('adminMemberList');if(!root)return;const s=window.DDCloud?.state||{};document.getElementById('adminIdentity').textContent=`${db.currentUser||'管理者'}・${s.role==='owner'?'オーナー':'管理者'}`;root.innerHTML='<div class="empty">利用者を読み込んでいます…</div>';try{const rows=await window.DDCloud.listMembers();document.getElementById('adminMemberCount').textContent=`${rows.length}人`;document.getElementById('adminPendingCount').textContent=rows.filter(x=>x.status==='pending').length;document.getElementById('adminApprovedCount').textContent=rows.filter(x=>x.status==='approved').length;document.getElementById('adminSuspendedCount').textContent=rows.filter(x=>x.status==='suspended').length;root.innerHTML=rows.length?rows.map(m=>`<div class="admin-member"><div class="admin-member-head"><div><b>${esc(m.display_name)}</b><div class="admin-badges"><span class="admin-badge ${m.status}">${accessLabel(m.status)}</span><span class="admin-badge">${m.role==='owner'?'オーナー':m.role==='admin'?'管理者':'一般'}</span>${m.is_self?'<span class="admin-badge">あなた</span>':''}</div></div></div>${m.is_self||m.role==='owner'?'':`<div class="admin-actions">${m.status!=='approved'?`<button class="approve" onclick="adminSetMember('${m.user_id}',{status:'approved'})">🚪 チェックインを許可する</button>`:''}${m.status==='approved'?`<button class="stop" onclick="adminSetMember('${m.user_id}',{status:'suspended'})">利用停止</button>`:`<button class="role" onclick="adminSetMember('${m.user_id}',{status:'rejected'})">拒否</button>`}<button class="role" onclick="adminSetMember('${m.user_id}',{role:'${m.role==='admin'?'member':'admin'}'})">${m.role==='admin'?'一般へ戻す':'管理者にする'}</button></div>`}</div>`).join(''):'<div class="empty">利用者はいません</div>'}catch(e){root.innerHTML=`<div class="empty">${esc(e.message||'読み込めませんでした')}</div>`}}
-async function adminSetMember(userId,patch){try{await window.DDCloud.updateMember(userId,patch);toast(patch.status==='approved'?'チェックインを許可しました':'権限を更新しました');renderAdminPage()}catch(e){toast(e.message||'更新できませんでした')}}
+function openAdminPage(){go('admin')}
+function renderAdminPage(){}
+async function adminSetMember(){return false}
 const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById('admin').classList.add('active');document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));window.scrollTo(0,0);return}return _goV17.apply(this,arguments)};
 </script>
 
@@ -4825,7 +4757,7 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 .gear-menu-option{width:100%;border:1px solid rgba(35,68,91,.12);background:#fff;border-radius:20px;padding:15px;display:grid;grid-template-columns:48px 1fr 18px;gap:11px;align-items:center;text-align:left;margin-top:10px;color:#243946;box-shadow:0 7px 18px rgba(36,57,70,.06)}
 .gear-menu-option-icon{width:46px;height:46px;border-radius:15px;display:grid;place-items:center;background:#edf4ea;font-size:23px}.gear-menu-option.admin-option .gear-menu-option-icon{background:#eef1f8}.gear-menu-option span:nth-child(2){display:flex;flex-direction:column;gap:3px}.gear-menu-option b{font-size:17px}.gear-menu-option small{font-size:12px;line-height:1.45;color:#78838a}.gear-menu-option i{font-style:normal;font-size:26px;color:#a3853d}
 
-/* legacy card styles retained for compatibility */
+/* shared menu-card styles */
 .other-menu-grid{display:grid;grid-template-columns:1fr;gap:10px;margin:14px 18px 16px}
 .other-menu-card{width:100%;border:1px solid rgba(34,64,87,.12);background:rgba(255,255,255,.86);border-radius:20px;padding:15px 16px;display:grid;grid-template-columns:44px 1fr 18px;align-items:center;gap:10px;text-align:left;box-shadow:0 7px 20px rgba(40,49,56,.06);color:var(--ink)}
 .other-menu-card .other-menu-icon{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:#eef3ea;font-size:22px}
@@ -4837,13 +4769,13 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 </style>
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
-<script src="./backend-config.js?v=173"></script>
-<script src="./app-cloud-bridge.js?v=182"></script>
+<script src="./backend-config.js?v=185"></script>
+<script src="./app-cloud-bridge.js?v=185"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const reg = await navigator.serviceWorker.register('./service-worker.js?v=18.2', { updateViaCache: 'none' });
+      const reg = await navigator.serviceWorker.register('./service-worker.js?v=18.5', { updateViaCache: 'none' });
       await reg.update();
     } catch (e) { console.warn(e); }
   });
