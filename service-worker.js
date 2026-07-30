@@ -1,4 +1,4 @@
-const CACHE='dd-tiktok-v17-5-1-owner-access-hotfix';
+const CACHE='dd-tiktok-v17-5-2';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./app-icon.svg',
   './apple-touch-icon.png',
   './app-icon-192.png',
