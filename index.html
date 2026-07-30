@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="22.0-stability-backup">
+<meta name="dd-build" content="24.2-restore-capacity-fix">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -2776,7 +2776,7 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
     <div class="hotel-status" id="hotelStatus"><span></span>CHECKING IN...</div>
     <button id="accessRetryBtn" type="button" onclick="retryAccessCheck()">チェックイン状況を確認</button>
     <button id="ownerEmergencyBtn" class="owner-emergency-btn" type="button" onclick="openOwnerPin()">👑 オーナーはこちら（暗証番号）</button>
-    <div style="margin-top:8px;font-size:11px;color:#a58a45;letter-spacing:.08em">Ver24.1・大量履歴安定化版</div>
+    <div style="margin-top:8px;font-size:11px;color:#a58a45;letter-spacing:.08em">Ver24.2・大量履歴安定化版</div>
     <div id="ownerPinPanel" class="owner-pin-panel" hidden>
       <small>OWNER ACCESS</small>
       <b>4桁の暗証番号</b>
@@ -4271,7 +4271,7 @@ function buildBackupPayload(){
  return {
   format:'D&D_TIKTOK_BACKUP',
   schemaVersion:BACKUP_SCHEMA_VERSION,
-  appBuild:'24.0',
+  appBuild:'24.2',
   exportedAt:new Date().toISOString(),
   data:JSON.parse(JSON.stringify(db))
  };
@@ -4302,29 +4302,49 @@ function restoreBackup(ev){
  const input=ev.target,f=input.files?.[0];if(!f)return;
  const r=new FileReader();
  r.onload=async()=>{
+  let previousDb=db;
   try{
    const parsed=JSON.parse(String(r.result||''));
    const restored=normalizeBackupData(parsed);
    const restoredParents=restored.devices.filter(d=>(d.type||'normal')==='parent').length;
    const restoredNormals=restored.devices.length-restoredParents;
-   if(!confirm(`保有端末 ${restoredNormals}台\n親機 ${restoredParents}台\n履歴 ${restored.entries.length}件\n\n基本チェックで問題は見つかりませんでした\n\n現在のデータは端末内に一時退避してから復元します。続けますか？`))return;
-   try{localStorage.setItem(PRE_RESTORE_KEY,JSON.stringify(buildBackupPayload()))}catch(_){}
+   if(!confirm(`保有端末 ${restoredNormals}台\n親機 ${restoredParents}台\n履歴 ${restored.entries.length}件\n\n基本チェックで問題は見つかりませんでした\n\n現在のデータを置き換えて復元します。続けますか？`))return;
+
+   // 大量データをlocalStorageへ二重保存すると容量超過になるため、
+   // 復元前データの丸ごと一時コピーは作らない。
+   try{localStorage.removeItem(PRE_RESTORE_KEY)}catch(_){}
+
    db=restored;
    db.devices.forEach(initDeviceGenerations);
    recalculateStoredEntries(db);
    db.version=101;
-   persist();
+
+   try{
+    persist();
+   }catch(storageError){
+    // 旧データ以外の不要な一時バックアップを除去して再試行
+    try{
+     localStorage.removeItem(PRE_RESTORE_KEY);
+     persist();
+    }catch(secondError){
+     db=previousDb;
+     throw new Error('端末の保存容量が不足しています。ブラウザのサイトデータ容量を確保してから再度お試しください。');
+    }
+   }
+
    renderHome();renderSecuritySettings();
-   // 復元直後に古いクラウドデータへ戻されないよう、待機せず確定保存する。
-   const targetDays=['2026-07-24','2026-07-25','2026-07-26','2026-07-27','2026-07-28','2026-07-29','2026-07-30'];
-   const restoredCounts=Object.fromEntries(targetDays.map(day=>[day,db.entries.filter(e=>e.date===day).length]));
    try{
     if(window.DDCloud?.state?.accessStatus==='approved') await window.DDCloud.push();
     else window.DDCloud?.queuePush?.();
    }catch(err){console.warn('復元後クラウド保存:',err)}
-   toast(`復元完了：7/24〜7/30 合計 ${Object.values(restoredCounts).reduce((a,n)=>a+n,0)}件`);
-  }catch(e){console.error(e);toast('正しいバックアップではありません')}
-  finally{input.value=''}
+
+   toast(`復元完了：保有端末${restoredNormals}台・親機${restoredParents}台`);
+  }catch(e){
+   console.error('復元エラー:',e);
+   toast(e?.message||'バックアップを復元できませんでした');
+  }finally{
+   input.value='';
+  }
  };
  r.onerror=()=>{input.value='';toast('ファイルを読み込めませんでした')};
  r.readAsText(f);
