@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="22.0-stability-backup">
+<meta name="dd-build" content="24.0-migration-ready">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -2776,7 +2776,7 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
     <div class="hotel-status" id="hotelStatus"><span></span>CHECKING IN...</div>
     <button id="accessRetryBtn" type="button" onclick="retryAccessCheck()">チェックイン状況を確認</button>
     <button id="ownerEmergencyBtn" class="owner-emergency-btn" type="button" onclick="openOwnerPin()">👑 オーナーはこちら（暗証番号）</button>
-    <div style="margin-top:8px;font-size:11px;color:#a58a45;letter-spacing:.08em">Ver23.0・安定版</div>
+    <div style="margin-top:8px;font-size:11px;color:#a58a45;letter-spacing:.08em">Ver24.0・移行準備版</div>
     <div id="ownerPinPanel" class="owner-pin-panel" hidden>
       <small>OWNER ACCESS</small>
       <b>4桁の暗証番号</b>
@@ -4261,13 +4261,13 @@ function editEntry(id){
  try{parseInput(v);e.raw=normalizeRaw(v);recalcDevice(e.deviceId);toast('この端末の後続データを再計算しました');renderReport();renderHome()}catch(err){toast(err.message)}
 }
 
-const BACKUP_SCHEMA_VERSION=22;
-const PRE_RESTORE_KEY='dd_tiktok_pre_restore_backup_v22';
+const BACKUP_SCHEMA_VERSION=24;
+const PRE_RESTORE_KEY='dd_tiktok_pre_restore_backup_v24';
 function buildBackupPayload(){
  return {
   format:'D&D_TIKTOK_BACKUP',
   schemaVersion:BACKUP_SCHEMA_VERSION,
-  appBuild:'22.0',
+  appBuild:'24.0',
   exportedAt:new Date().toISOString(),
   data:JSON.parse(JSON.stringify(db))
  };
@@ -4294,6 +4294,26 @@ function normalizeBackupData(source){
  restored.version=Math.max(Number(x.version||0),100);
  return restored;
 }
+function inspectBackupData(restored){
+ const warnings=[];
+ const deviceIds=new Set();
+ let duplicateDevices=0,duplicateEntries=0,orphanEntries=0,invalidDates=0;
+ const entryIds=new Set();
+ restored.devices.forEach(d=>{const id=String(d?.id??'');if(!id||deviceIds.has(id))duplicateDevices++;else deviceIds.add(id)});
+ restored.entries.forEach(e=>{
+  const id=String(e?.id??'');if(id&&entryIds.has(id))duplicateEntries++;else if(id)entryIds.add(id);
+  if(!deviceIds.has(String(e?.deviceId??'')))orphanEntries++;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(e?.date??'')))invalidDates++;
+ });
+ if(duplicateDevices)warnings.push(`端末ID重複 ${duplicateDevices}件`);
+ if(duplicateEntries)warnings.push(`履歴ID重複 ${duplicateEntries}件`);
+ if(orphanEntries)warnings.push(`端末に紐づかない履歴 ${orphanEntries}件`);
+ if(invalidDates)warnings.push(`日付形式エラー ${invalidDates}件`);
+ const profit=restored.entries.reduce((a,e)=>a+Number(e?.profit||0),0);
+ const increase=restored.entries.reduce((a,e)=>a+Number(e?.increase||0),0);
+ const discarded=restored.entries.reduce((a,e)=>a+Number(e?.discarded||0),0);
+ return {warnings,profit,increase,discarded};
+}
 function restoreBackup(ev){
  const input=ev.target,f=input.files?.[0];if(!f)return;
  const r=new FileReader();
@@ -4301,7 +4321,10 @@ function restoreBackup(ev){
   try{
    const parsed=JSON.parse(String(r.result||''));
    const restored=normalizeBackupData(parsed);
-   if(!confirm(`端末 ${restored.devices.length}台・履歴 ${restored.entries.length}件を復元します。現在のデータは端末内に一時退避されます。続けますか？`))return;
+   const check=inspectBackupData(restored);
+   const warningText=check.warnings.length?`\n\n⚠ 確認事項\n・${check.warnings.join('\n・')}`:'\n\n✓ 基本チェックで問題は見つかりませんでした';
+   const summary=`端末 ${restored.devices.length}台\n履歴 ${restored.entries.length}件\nPayPay実利益合計 ${yen(check.profit)}\n増加分合計 ${yen(check.increase)}\n捨てた分合計 ${yen(check.discarded)}`;
+   if(!confirm(`${summary}${warningText}\n\n現在のデータは端末内に一時退避してから復元します。続けますか？`))return;
    try{localStorage.setItem(PRE_RESTORE_KEY,JSON.stringify(buildBackupPayload()))}catch(_){}
    db=restored;
    db.devices.forEach(initDeviceGenerations);
