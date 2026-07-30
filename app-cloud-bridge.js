@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver21.0 GitHub Pages approval bridge - owner identity protection */
+/* D&D❀TikTok Ver22.0 GitHub Pages approval bridge - stable owner and member access */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
