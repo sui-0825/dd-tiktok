@@ -1,4 +1,4 @@
-const CACHE='dd-tiktok-v17-3-gear-menu';
+const CACHE='dd-tiktok-v17-4-hotel-checkin';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./app-icon.svg',
   './apple-touch-icon.png',
   './app-icon-192.png',
