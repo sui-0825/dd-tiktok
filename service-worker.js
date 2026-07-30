@@ -1,4 +1,4 @@
-// Ver24.0: 更新優先。旧キャッシュを削除してService Workerを解除します。
+// Ver22.0: 更新優先。旧キャッシュを削除してService Workerを解除します。
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', event => {
   event.waitUntil(
