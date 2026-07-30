@@ -2297,20 +2297,13 @@ button:active,.status-card-link:active,.row[onclick]:active,.suggestitem:active{
 </section>
 
 <section id="history" class="screen">
-  <div class="topbar"><button class="iconbtn" onclick="go('home')">‹</button><div class="title">収支銀行</div><div><button class="iconbtn settings-gear" onclick="go('settings')" aria-label="収支設定"><span>⚙</span></button><button class="iconbtn" onclick="exportBackup()">⇩</button></div></div>
+  <div class="topbar"><button class="iconbtn" onclick="go('home')">‹</button><div class="title">収支銀行</div><div><button class="iconbtn settings-gear" onclick="openGearMenu()" aria-label="設定メニュー"><span>⚙</span></button><button class="iconbtn" onclick="exportBackup()">⇩</button></div></div>
   <div class="bank-masthead" aria-hidden="true">
     <div class="bank-emblem">D&amp;D</div>
     <div><small>PRIVATE WEALTH MANAGEMENT</small><b>D&amp;D ROYAL BANK</b><span>資産と利益を、ひと目で。</span></div>
     <div class="bank-chip"></div>
   </div>
   <div class="bank-ticker" aria-hidden="true"><span>PAYPAY PROFIT</span><i>◆</i><span>COMMUNICATION COST</span><i>◆</i><span>FINAL BALANCE</span></div>
-  <div class="other-menu-grid">
-    <button class="other-menu-card admin-link" type="button" onclick="openAdminPage()">
-      <span class="other-menu-icon">👑</span>
-      <span><b>管理者ページ</b><small>利用者承認・バックアップ・データ削除</small></span>
-      <i>›</i>
-    </button>
-  </div>
   <div class="tabs">
     <button class="tab active" onclick="setReportMode('monthly',this)">月別推移</button>
     <button class="tab" onclick="setReportMode('yearly',this)">年間推移</button>
@@ -2353,6 +2346,27 @@ button:active,.status-card-link:active,.row[onclick]:active,.suggestitem:active{
   </div>
 </section>
 
+
+
+<div id="gearMenuBackdrop" class="gear-menu-backdrop" onclick="closeGearMenu(event)">
+  <div class="gear-menu-sheet" role="dialog" aria-modal="true" aria-labelledby="gearMenuTitle">
+    <div class="gear-menu-handle"></div>
+    <div class="gear-menu-head">
+      <div><small>D&amp;D❀TikTok</small><h2 id="gearMenuTitle">設定メニュー</h2></div>
+      <button type="button" class="gear-menu-close" onclick="closeGearMenu()" aria-label="閉じる">×</button>
+    </div>
+    <button class="gear-menu-option" type="button" onclick="closeGearMenu();go('settings')">
+      <span class="gear-menu-option-icon">⚙️</span>
+      <span><b>収支設定</b><small>月の通信費・月目標・総合初期投資</small></span>
+      <i>›</i>
+    </button>
+    <button class="gear-menu-option admin-option" type="button" onclick="closeGearMenu();openAdminPage()">
+      <span class="gear-menu-option-icon">👑</span>
+      <span><b>管理者ページ</b><small>利用者承認・バックアップ・データ削除</small></span>
+      <i>›</i>
+    </button>
+  </div>
+</div>
 
 <section id="admin" class="screen">
   <div class="topbar"><button class="iconbtn" onclick="go('history')">‹</button><div class="title">管理者ページ</div><button class="iconbtn" onclick="renderAdminPage()">↻</button></div>
@@ -4693,6 +4707,11 @@ function hideAccessGate(){document.getElementById('accessGate')?.classList.remov
 async function retryAccessCheck(){try{const name=String(localStorage.getItem('dd_tiktok_local_user_v1')||'').trim();if(!name){hideAccessGate();showFirstLogin();return}await window.DDCloud?.requestAccess(name)}catch(e){showAccessGate('確認できませんでした',e.message||'通信状態を確認してください') }}
 window.addEventListener('dd-access-state',e=>{ddAccessState=e.detail||{};const s=ddAccessState.accessStatus;if(s==='approved'){hideAccessGate()}else if(s==='pending'){showAccessGate('承認待ちです','管理者が承認すると、この端末からアプリを利用できるようになります。')}else if(s==='suspended'){showAccessGate('利用が停止されています','管理者へお問い合わせください。')}else if(s==='rejected'){showAccessGate('利用申請が承認されませんでした','管理者へお問い合わせください。')}});
 const _completeFirstLoginV17=window.completeFirstLogin;window.completeFirstLogin=function(){_completeFirstLoginV17.apply(this,arguments);const name=String(localStorage.getItem('dd_tiktok_local_user_v1')||'').trim();if(name){showAccessGate('利用申請中','承認状態を確認しています。',false);setTimeout(()=>window.DDCloud?.requestAccess(name).catch(e=>showAccessGate('申請できませんでした',e.message)),250)}};
+
+function openGearMenu(){document.getElementById('gearMenuBackdrop')?.classList.add('show');document.body.style.overflow='hidden'}
+function closeGearMenu(ev){if(ev && ev.target!==ev.currentTarget)return;document.getElementById('gearMenuBackdrop')?.classList.remove('show');document.body.style.overflow=''}
+window.addEventListener('keydown',e=>{if(e.key==='Escape')closeGearMenu()});
+
 function openAdminPage(){const s=window.DDCloud?.state||{};if(!['owner','admin'].includes(s.role)){toast(s.accessStatus==='approved'?'管理者のみ開けます':'承認後に利用できます');return}go('admin');renderAdminPage()}
 async function renderAdminPage(){const root=document.getElementById('adminMemberList');if(!root)return;const s=window.DDCloud?.state||{};document.getElementById('adminIdentity').textContent=`${db.currentUser||'管理者'}・${s.role==='owner'?'オーナー':'管理者'}`;root.innerHTML='<div class="empty">利用者を読み込んでいます…</div>';try{const rows=await window.DDCloud.listMembers();document.getElementById('adminMemberCount').textContent=`${rows.length}人`;document.getElementById('adminPendingCount').textContent=rows.filter(x=>x.status==='pending').length;document.getElementById('adminApprovedCount').textContent=rows.filter(x=>x.status==='approved').length;document.getElementById('adminSuspendedCount').textContent=rows.filter(x=>x.status==='suspended').length;root.innerHTML=rows.length?rows.map(m=>`<div class="admin-member"><div class="admin-member-head"><div><b>${esc(m.display_name)}</b><div class="admin-badges"><span class="admin-badge ${m.status}">${accessLabel(m.status)}</span><span class="admin-badge">${m.role==='owner'?'オーナー':m.role==='admin'?'管理者':'一般'}</span>${m.is_self?'<span class="admin-badge">あなた</span>':''}</div></div></div>${m.is_self||m.role==='owner'?'':`<div class="admin-actions">${m.status!=='approved'?`<button class="approve" onclick="adminSetMember('${m.user_id}',{status:'approved'})">承認</button>`:''}${m.status==='approved'?`<button class="stop" onclick="adminSetMember('${m.user_id}',{status:'suspended'})">利用停止</button>`:`<button class="role" onclick="adminSetMember('${m.user_id}',{status:'rejected'})">拒否</button>`}<button class="role" onclick="adminSetMember('${m.user_id}',{role:'${m.role==='admin'?'member':'admin'}'})">${m.role==='admin'?'一般へ戻す':'管理者にする'}</button></div>`}</div>`).join(''):'<div class="empty">利用者はいません</div>'}catch(e){root.innerHTML=`<div class="empty">${esc(e.message||'読み込めませんでした')}</div>`}}
 async function adminSetMember(userId,patch){try{await window.DDCloud.updateMember(userId,patch);toast('権限を更新しました');renderAdminPage()}catch(e){toast(e.message||'更新できませんでした')}}
@@ -4703,7 +4722,18 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 #cloudStatusPill{position:fixed;right:10px;top:74px;z-index:9998;border:1px solid #d8c27b;background:rgba(255,252,241,.96);color:#183a52;border-radius:999px;padding:5px 9px;font:700 10px/1.2 system-ui;box-shadow:0 4px 14px rgba(0,0,0,.10);max-width:calc(100vw - 20px);transition:opacity .25s ease,transform .25s ease;white-space:nowrap}#cloudStatusPill.dd-cloud-hide{opacity:0;transform:translateY(-8px);pointer-events:none}
 #cloudStatusPill[data-mode="cloud"]{background:#eafaf1;color:#17633a}#cloudStatusPill[data-mode="error"]{background:#fff0f0;color:#9a2c2c}
 
-/* ===== Ver17.2 右上ギアで収支設定・管理者カードのみ表示 ===== */
+
+/* ===== Ver17.3 ギア内に収支設定・管理者ページを集約 ===== */
+.gear-menu-backdrop{position:fixed;inset:0;z-index:25000;background:rgba(7,24,38,.42);display:none;align-items:flex-end;justify-content:center;padding:12px;backdrop-filter:blur(4px)}
+.gear-menu-backdrop.show{display:flex}
+.gear-menu-sheet{width:min(560px,100%);background:linear-gradient(180deg,#fffdf7,#f7fbfc);border:1px solid rgba(214,183,88,.5);border-radius:28px 28px 20px 20px;padding:10px 16px 18px;box-shadow:0 -18px 50px rgba(7,24,38,.28);animation:gearMenuUp .2s ease-out}
+@keyframes gearMenuUp{from{transform:translateY(28px);opacity:.4}to{transform:translateY(0);opacity:1}}
+.gear-menu-handle{width:46px;height:5px;border-radius:99px;background:#c9d0d4;margin:2px auto 12px}
+.gear-menu-head{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 12px}.gear-menu-head small{letter-spacing:.15em;color:#8a7440;font-size:10px}.gear-menu-head h2{margin:3px 0 0;color:#17384d;font-size:22px}.gear-menu-close{width:38px;height:38px;border-radius:50%;border:0;background:#eef2f3;color:#264457;font-size:26px;line-height:1}
+.gear-menu-option{width:100%;border:1px solid rgba(35,68,91,.12);background:#fff;border-radius:20px;padding:15px;display:grid;grid-template-columns:48px 1fr 18px;gap:11px;align-items:center;text-align:left;margin-top:10px;color:#243946;box-shadow:0 7px 18px rgba(36,57,70,.06)}
+.gear-menu-option-icon{width:46px;height:46px;border-radius:15px;display:grid;place-items:center;background:#edf4ea;font-size:23px}.gear-menu-option.admin-option .gear-menu-option-icon{background:#eef1f8}.gear-menu-option span:nth-child(2){display:flex;flex-direction:column;gap:3px}.gear-menu-option b{font-size:17px}.gear-menu-option small{font-size:12px;line-height:1.45;color:#78838a}.gear-menu-option i{font-style:normal;font-size:26px;color:#a3853d}
+
+/* legacy card styles retained for compatibility */
 .other-menu-grid{display:grid;grid-template-columns:1fr;gap:10px;margin:14px 18px 16px}
 .other-menu-card{width:100%;border:1px solid rgba(34,64,87,.12);background:rgba(255,255,255,.86);border-radius:20px;padding:15px 16px;display:grid;grid-template-columns:44px 1fr 18px;align-items:center;gap:10px;text-align:left;box-shadow:0 7px 20px rgba(40,49,56,.06);color:var(--ink)}
 .other-menu-card .other-menu-icon{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:#eef3ea;font-size:22px}
@@ -4715,8 +4745,8 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 </style>
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
-<script src="./backend-config.js?v=170"></script>
-<script src="./app-cloud-bridge.js?v=170"></script>
+<script src="./backend-config.js?v=173"></script>
+<script src="./app-cloud-bridge.js?v=173"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(console.warn));

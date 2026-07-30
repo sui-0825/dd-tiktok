@@ -1,4 +1,4 @@
-const CACHE='dd-tiktok-v17-2-gear-settings';
+const CACHE='dd-tiktok-v17-3-gear-menu';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./app-icon.svg',
   './apple-touch-icon.png',
   './app-icon-192.png',
