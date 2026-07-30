@@ -1043,6 +1043,11 @@ button:active,.status-card-link:active,.row[onclick]:active,.suggestitem:active{
 .member-name-list{display:grid!important;gap:8px!important;padding:0!important}
 .member-name-row{display:grid;grid-template-columns:minmax(0,1fr) 42px 42px;align-items:center;gap:7px;padding:11px 10px 11px 15px;border-radius:16px;background:#fff;border:1px solid #d9e2e2;box-shadow:0 5px 13px rgba(13,49,63,.05)}
 .member-name-row.current{border-color:#72c8d9;background:#effcff}.member-name-main{min-width:0;display:flex;align-items:center;gap:10px}.member-name-main .online-dot{width:8px;height:8px;border-radius:50%;background:#bec7c9;flex:none}.member-name-row.current .online-dot{background:#43ad62;box-shadow:0 0 0 4px rgba(67,173,98,.12)}.member-name-main b{font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.member-name-main small{margin-left:auto;color:#3b9654;font-size:9px;font-weight:900}
+
+.member-name-row.online .online-dot{background:#43ad62;box-shadow:0 0 0 4px rgba(67,173,98,.12)}
+.member-name-row.offline .online-dot{background:#c8ced0;box-shadow:none}
+.member-presence{margin-left:auto;font-size:9px!important;font-weight:900;white-space:nowrap;color:#899397!important}
+.member-presence.online{color:#3b9654!important}.member-presence.self{color:#08728e!important}
 .member-order-btn{width:42px;height:38px;padding:0!important;border-radius:12px!important;background:#f4f7f7!important;border:1px solid #dce4e4!important;color:#395b65!important;font-size:18px!important}.member-order-btn:disabled{opacity:.25}
 .member-app-note{margin-top:15px;padding:14px 15px;border-radius:17px;background:#f7f2e7;border:1px solid #e4d8b8;color:#746b5c}.member-app-note b{display:block;color:#5d5036;font-size:12px}.member-app-note p{margin:5px 0 0;font-size:11px;line-height:1.65}
 @media(max-width:370px){.home-login-badge{min-width:92px;padding-inline:8px!important}.home-login-badge small{display:none}#home .brand{font-size:25px}.member-name-row{grid-template-columns:minmax(0,1fr) 38px 38px}.member-order-btn{width:38px}}
@@ -4623,8 +4628,18 @@ function updateLoginIdentityUI(){
  ensureLoginMember();
  ['homeLoginName','entryLoginMiniName','entryLoginName','memberDirectoryCurrent'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=currentInputOperator});
 }
+
+function formatMemberLastSeen(value){
+ if(!value)return '未接続';
+ const diff=Math.max(0,Date.now()-new Date(value).getTime());
+ if(diff<120000)return 'ONLINE';
+ const min=Math.floor(diff/60000);if(min<60)return `最終ログイン ${min}分前`;
+ const h=Math.floor(min/60);if(h<24)return `最終ログイン ${h}時間前`;
+ const d=Math.floor(h/24);return `最終ログイン ${d}日前`;
+}
+window.addEventListener('dd-presence-update',()=>{try{renderInputMembers();updateLoginIdentityUI()}catch(_){}});
 function openMemberDirectory(){
- ensureLoginMember();renderInputMembers();updateLoginIdentityUI();
+ ensureLoginMember();renderInputMembers();updateLoginIdentityUI();window.DDCloud?.refreshMembers?.().catch(()=>{});
  const overlay=document.getElementById('concurrentInputOverlay');if(overlay){overlay.classList.add('show');overlay.scrollTop=0}
 }
 function closeMemberDirectory(){const el=document.getElementById('concurrentInputOverlay');if(el)el.classList.remove('show')}
@@ -4634,7 +4649,7 @@ function renderInputMembers(){
  ensureLoginMember();
  const root=document.getElementById('operatorSlots');if(!root)return;
  const count=document.getElementById('memberCountLabel');if(count)count.textContent=`${db.members.length}人`;
- root.innerHTML=db.members.map((name,i)=>`<div class="member-name-row ${name===currentInputOperator?'current':''}"><div class="member-name-main"><i class="online-dot"></i><b>${esc(name)}</b>${name===currentInputOperator?'<small>ログイン中</small>':''}</div><button type="button" class="member-order-btn" onclick="moveMemberOrder(${i},-1)" ${i===0?'disabled':''} aria-label="上へ移動">↑</button><button type="button" class="member-order-btn" onclick="moveMemberOrder(${i},1)" ${i===db.members.length-1?'disabled':''} aria-label="下へ移動">↓</button></div>`).join('');
+ root.innerHTML=db.members.map((name,i)=>{const pr=window.DDCloud?.getPresenceByName?.(name)||{};const isSelf=name===currentInputOperator||pr.isSelf;const label=isSelf?'この端末でログイン中':pr.online?'ONLINE':formatMemberLastSeen(pr.lastSeenAt);return `<div class="member-name-row ${isSelf?'current ':''}${pr.online||isSelf?'online':'offline'}"><div class="member-name-main"><i class="online-dot"></i><b>${esc(name)}</b><small class="member-presence ${pr.online||isSelf?'online':''} ${isSelf?'self':''}">${esc(label)}</small></div><button type="button" class="member-order-btn" onclick="moveMemberOrder(${i},-1)" ${i===0?'disabled':''} aria-label="上へ移動">↑</button><button type="button" class="member-order-btn" onclick="moveMemberOrder(${i},1)" ${i===db.members.length-1?'disabled':''} aria-label="下へ移動">↓</button></div>`}).join('');
 }
 function moveMemberOrder(index,delta){
  const next=index+delta;if(next<0||next>=db.members.length)return;
@@ -4673,7 +4688,7 @@ function renderInputMembers(){
  ensureLoginMember();
  const root=document.getElementById('operatorSlots');if(!root)return;
  const count=document.getElementById('memberCountLabel');if(count)count.textContent=`${db.members.length}人`;
- root.innerHTML=db.members.length?db.members.map((name,i)=>`<div class="member-name-row ${name===currentInputOperator?'current':''}"><div class="member-name-main"><i class="online-dot"></i><b>${esc(name)}</b>${name===currentInputOperator?'<small>ログイン中</small>':''}</div><button type="button" class="member-order-btn" onclick="moveMemberOrder(${i},-1)" ${i===0?'disabled':''} aria-label="上へ移動">↑</button><button type="button" class="member-order-btn" onclick="moveMemberOrder(${i},1)" ${i===db.members.length-1?'disabled':''} aria-label="下へ移動">↓</button></div>`).join(''):'<div class="member-empty">最初のメンバー登録待ちです</div>';
+ root.innerHTML=db.members.length?db.members.map((name,i)=>{const pr=window.DDCloud?.getPresenceByName?.(name)||{};const isSelf=name===currentInputOperator||pr.isSelf;const label=isSelf?'この端末でログイン中':pr.online?'ONLINE':formatMemberLastSeen(pr.lastSeenAt);return `<div class="member-name-row ${isSelf?'current ':''}${pr.online||isSelf?'online':'offline'}"><div class="member-name-main"><i class="online-dot"></i><b>${esc(name)}</b><small class="member-presence ${pr.online||isSelf?'online':''} ${isSelf?'self':''}">${esc(label)}</small></div><button type="button" class="member-order-btn" onclick="moveMemberOrder(${i},-1)" ${i===0?'disabled':''} aria-label="上へ移動">↑</button><button type="button" class="member-order-btn" onclick="moveMemberOrder(${i},1)" ${i===db.members.length-1?'disabled':''} aria-label="下へ移動">↓</button></div>`}).join(''):'<div class="member-empty">最初のメンバー登録待ちです</div>';
 }
 function showFirstLogin(){
  const el=document.getElementById('firstLoginOverlay');if(!el)return;
