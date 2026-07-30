@@ -3,7 +3,7 @@
   "short_name": "D&D❀TikTok",
   "description": "TikTok Lite端末管理アプリ",
   "lang": "ja-JP",
-  "start_url": "./?v=185",
+  "start_url": "./?source=pwa",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
@@ -21,6 +21,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    },
+    {
+      "src": "./app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ],
   "id": "./",

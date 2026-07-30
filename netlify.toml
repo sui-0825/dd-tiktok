@@ -1,24 +1,6 @@
 [[headers]]
-  for = "/index.html"
+  for = "/*"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
-
-[[headers]]
-  for = "/app-cloud-bridge.js"
-  [headers.values]
-    Cache-Control = "no-cache, no-store, must-revalidate"
-
-[[headers]]
-  for = "/backend-config.js"
-  [headers.values]
-    Cache-Control = "no-cache, no-store, must-revalidate"
-
-[[headers]]
-  for = "/service-worker.js"
-  [headers.values]
-    Cache-Control = "no-cache, no-store, must-revalidate"
-
-[[headers]]
-  for = "/manifest.webmanifest"
-  [headers.values]
-    Cache-Control = "no-cache, must-revalidate"
+    Pragma = "no-cache"
+    Expires = "0"
