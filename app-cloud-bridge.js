@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver18.1 cloud bridge - owner fail-safe recovery */
+/* D&D❀TikTok Ver17.5.4 cloud bridge - owner PIN recovery */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -74,71 +74,136 @@ async function updateMember(userId,patch){if(!['owner','admin'].includes(state.r
 async function init(){if(!configured()){setStatus('設定不足・端末内保存','local','backend-config.jsの設定不足','config');return}try{setStatus('Supabaseへ接続中…','cloud','','connect');await ensureAuth();await verifyWorkspace();const name=getLocalUserName();if(name)await requestAccess(name);else{setStatus('名前を登録してください','cloud','','name-required');emitAccess()}}catch(e){console.error(e);setStatus(`接続失敗: ${String(e.message||'不明').slice(0,80)}`,'error',e.message,state.stage||'error')}}
 window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,getMembership,listMembers,updateMember,getPresenceByName,heartbeat,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),role:state.role,accessStatus:state.accessStatus}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
-
-
-// Ver18.1 fail-safe: even when an older cached index.html is displayed,
-// inject a fixed owner recovery control from this separately versioned script.
-function installOwnerFailSafe(){
-  if(document.getElementById('ddOwnerFailSafe'))return;
-  const style=document.createElement('style');
-  style.id='ddOwnerFailSafeStyle';
-  style.textContent=`
-    #ddOwnerFailSafe{position:fixed;left:16px;right:16px;bottom:82px;z-index:2147483646;display:none}
-    #accessGate.show~#ddOwnerFailSafe,#accessGate.show #ddOwnerFailSafe{display:block}
-    body.dd-access-blocked #ddOwnerFailSafe{display:block}
-    #ddOwnerFailSafe button{width:100%;border:1px solid rgba(229,198,110,.9);border-radius:16px;padding:15px 18px;background:linear-gradient(135deg,#163a53,#071e2d);color:#fff;font-size:15px;font-weight:900;box-shadow:0 12px 28px rgba(0,0,0,.3)}
-    #ddOwnerFailSafeDialog{position:fixed;inset:0;z-index:2147483647;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(3,18,29,.78);backdrop-filter:blur(8px)}
-    #ddOwnerFailSafeDialog.show{display:flex}
-    #ddOwnerFailSafeDialog .box{width:min(360px,100%);background:#fffaf0;border:1px solid #dfbd58;border-radius:24px;padding:24px;text-align:center;box-shadow:0 26px 70px rgba(0,0,0,.42)}
-    #ddOwnerFailSafeDialog small{display:block;color:#9b7927;letter-spacing:.18em;font-weight:900}
-    #ddOwnerFailSafeDialog h3{margin:8px 0 14px;color:#17364c}
-    #ddOwnerFailSafeDialog input{width:150px;box-sizing:border-box;border:1px solid #d3b657;border-radius:13px;padding:11px;text-align:center;font-size:28px;letter-spacing:.3em}
-    #ddOwnerFailSafeDialog .err{min-height:20px;margin:8px 0;color:#a22;font-size:12px;font-weight:800}
-    #ddOwnerFailSafeDialog .actions{display:flex;gap:9px}
-    #ddOwnerFailSafeDialog .actions button{flex:1;border:0;border-radius:13px;padding:12px;font-weight:900}
-    #ddOwnerFailSafeDialog .cancel{background:#edf1f3;color:#345}
-    #ddOwnerFailSafeDialog .enter{background:linear-gradient(135deg,#b98212,#edcf67);color:#fff}
-  `;
-  document.head.appendChild(style);
-  const bar=document.createElement('div');
-  bar.id='ddOwnerFailSafe';
-  bar.innerHTML='<button type="button">👑 オーナー暗証番号で緊急入室 · Ver18.1</button>';
-  document.body.appendChild(bar);
-  const dialog=document.createElement('div');
-  dialog.id='ddOwnerFailSafeDialog';
-  dialog.innerHTML='<div class="box"><small>OWNER ACCESS</small><h3>4桁の暗証番号</h3><input type="password" inputmode="numeric" maxlength="4" placeholder="••••"><div class="err"></div><div class="actions"><button class="cancel" type="button">戻る</button><button class="enter" type="button">入室する</button></div></div>';
-  document.body.appendChild(dialog);
-  const input=dialog.querySelector('input'),err=dialog.querySelector('.err');
-  bar.querySelector('button').onclick=()=>{dialog.classList.add('show');input.value='';err.textContent='';setTimeout(()=>input.focus(),60)};
-  dialog.querySelector('.cancel').onclick=()=>dialog.classList.remove('show');
-  dialog.querySelector('.enter').onclick=async()=>{
-    const pin=String(input.value||'');
-    if(!/^\d{4}$/.test(pin)){err.textContent='4桁の数字を入力してください';return}
-    err.textContent='確認しています…';
-    try{
-      await ownerEmergencyUnlock(pin);
-      try{localStorage.setItem('dd_owner_role_permanent_v18','owner')}catch(_){}
-      document.documentElement.dataset.ownerRecovered='1';
-      document.body.classList.remove('dd-access-blocked');
-      document.getElementById('accessGate')?.classList.remove('show');
-      dialog.classList.remove('show');
-      bar.style.display='none';
-      if(typeof window.toast==='function')window.toast('👑 オーナーとして復旧しました');
-      if(typeof window.go==='function')window.go('home');
-      try{await pull();startPresence();refreshUI()}catch(e){console.warn(e)}
-    }catch(e){err.textContent=e?.message||'入室できませんでした';input.value='';input.focus()}
-  };
-  const sync=()=>{
-    const gate=document.getElementById('accessGate');
-    const blocked=Boolean(gate?.classList.contains('show'))&&state.accessStatus!=='approved';
-    document.body.classList.toggle('dd-access-blocked',blocked);
-    if(hasOwnerEmergencyUnlock())bar.style.display='none';
-  };
-  new MutationObserver(sync).observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:['class']});
-  sync();
-}
-
-window.addEventListener('DOMContentLoaded',()=>{hookPersist();installOwnerFailSafe();setTimeout(init,350)});
+window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved')heartbeat().catch(console.warn)});
 window.addEventListener('focus',()=>{if(state.accessStatus==='approved')heartbeat().catch(console.warn)});
+})();
+
+/* Ver18.2 owner rescue overlay: works even when an older index.html remains visible. */
+(() => {
+  const UNLOCK_KEY = 'dd_owner_emergency_unlock_v1';
+  const PERMANENT_KEY = 'dd_owner_role_permanent_v18';
+  const PIN_HASH = '1b5dae7d0665b854991304a139eeb289021414897e69631761639958fc30a7bd';
+
+  async function hashPin(value) {
+    const data = new TextEncoder().encode(String(value || ''));
+    const digest = await crypto.subtle.digest('SHA-256', data);
+    return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function isGateVisible() {
+    const gate = document.getElementById('accessGate');
+    if (!gate) return false;
+    const style = getComputedStyle(gate);
+    return gate.classList.contains('show') || style.display !== 'none';
+  }
+
+  function hideRescue() {
+    document.getElementById('ddOwnerRescueOverlay')?.remove();
+  }
+
+  function createRescue() {
+    if (document.getElementById('ddOwnerRescueButton')) return;
+
+    const button = document.createElement('button');
+    button.id = 'ddOwnerRescueButton';
+    button.type = 'button';
+    button.textContent = '👑 オーナー暗証番号で入室';
+    button.setAttribute('aria-label', 'オーナー暗証番号で緊急入室');
+    Object.assign(button.style, {
+      position: 'fixed', left: '50%', bottom: '86px', transform: 'translateX(-50%)',
+      zIndex: '2147483646', width: 'min(86vw, 410px)', padding: '14px 18px',
+      borderRadius: '16px', border: '1px solid rgba(226,190,82,.9)',
+      background: 'linear-gradient(135deg,#173e55,#071f2f)', color: '#fff',
+      fontWeight: '900', fontSize: '15px', boxShadow: '0 14px 32px rgba(0,0,0,.32)'
+    });
+
+    const badge = document.createElement('div');
+    badge.id = 'ddOwnerRescueVersion';
+    badge.textContent = 'Ver18.2';
+    Object.assign(badge.style, {
+      position: 'fixed', right: '12px', bottom: '62px', zIndex: '2147483646',
+      color: '#d8b74f', fontSize: '10px', fontWeight: '800'
+    });
+
+    button.addEventListener('click', () => {
+      if (document.getElementById('ddOwnerRescueOverlay')) return;
+      const overlay = document.createElement('div');
+      overlay.id = 'ddOwnerRescueOverlay';
+      Object.assign(overlay.style, {
+        position: 'fixed', inset: '0', zIndex: '2147483647', display: 'grid',
+        placeItems: 'center', padding: '20px', background: 'rgba(3,18,29,.78)',
+        backdropFilter: 'blur(8px)'
+      });
+      overlay.innerHTML = `
+        <div style="width:min(92vw,380px);background:#fffdf7;border:1px solid #d9bd69;border-radius:25px;padding:25px;text-align:center;box-shadow:0 25px 70px rgba(0,0,0,.4)">
+          <div style="font-size:34px">👑</div>
+          <small style="letter-spacing:.18em;color:#9b7a20;font-weight:900">OWNER ACCESS</small>
+          <h3 style="margin:9px 0;color:#15384e">オーナー緊急入室</h3>
+          <p style="margin:0 0 14px;color:#68747c;font-size:13px">4桁の暗証番号を入力してください</p>
+          <input id="ddOwnerRescuePin" type="password" inputmode="numeric" maxlength="4" pattern="[0-9]*" autocomplete="off" style="width:155px;font-size:28px;letter-spacing:.35em;text-align:center;padding:10px;border:1px solid #d9bd69;border-radius:13px;outline:none;background:#fff">
+          <div id="ddOwnerRescueError" style="min-height:22px;margin-top:8px;color:#a22;font-size:12px;font-weight:800"></div>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="ddOwnerRescueCancel" type="button" style="flex:1;border:0;border-radius:13px;padding:12px;background:#edf1f3;color:#345;font-weight:900">戻る</button>
+            <button id="ddOwnerRescueSubmit" type="button" style="flex:1;border:0;border-radius:13px;padding:12px;background:linear-gradient(135deg,#b98713,#efd46a);color:#fff;font-weight:900">入室する</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const input = overlay.querySelector('#ddOwnerRescuePin');
+      const error = overlay.querySelector('#ddOwnerRescueError');
+      overlay.querySelector('#ddOwnerRescueCancel').onclick = hideRescue;
+      overlay.querySelector('#ddOwnerRescueSubmit').onclick = async () => {
+        const pin = String(input.value || '');
+        if (!/^\d{4}$/.test(pin)) { error.textContent = '4桁の数字を入力してください'; return; }
+        error.textContent = '確認しています…';
+        try {
+          if (await hashPin(pin) !== PIN_HASH) throw new Error('暗証番号が違います');
+          localStorage.setItem(UNLOCK_KEY, '1');
+          localStorage.setItem(PERMANENT_KEY, 'owner');
+          document.documentElement.dataset.ownerRecovered = '1';
+          if (window.DDCloud?.state) {
+            window.DDCloud.state.role = 'owner';
+            window.DDCloud.state.accessStatus = 'approved';
+          }
+          try { await window.DDCloud?.ownerEmergencyUnlock(pin); } catch (cloudError) { console.warn(cloudError); }
+          document.getElementById('accessGate')?.classList.remove('show');
+          document.getElementById('firstLoginOverlay')?.classList.remove('show');
+          hideRescue();
+          button.remove(); badge.remove();
+          window.dispatchEvent(new CustomEvent('dd-access-state', { detail: { role: 'owner', accessStatus: 'approved' } }));
+          if (typeof window.renderHome === 'function') window.renderHome();
+          if (typeof window.toast === 'function') window.toast('オーナーとして入室しました');
+        } catch (err) {
+          error.textContent = err?.message || '入室できませんでした';
+          input.value = '';
+          input.focus();
+        }
+      };
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') overlay.querySelector('#ddOwnerRescueSubmit').click(); });
+      setTimeout(() => input.focus(), 80);
+    });
+
+    document.body.append(button, badge);
+  }
+
+  function refreshRescueVisibility() {
+    let recovered = false;
+    try { recovered = localStorage.getItem(UNLOCK_KEY) === '1' || localStorage.getItem(PERMANENT_KEY) === 'owner'; } catch (_) {}
+    const btn = document.getElementById('ddOwnerRescueButton');
+    const ver = document.getElementById('ddOwnerRescueVersion');
+    if (recovered || !isGateVisible()) {
+      if (btn) btn.style.display = 'none';
+      if (ver) ver.style.display = 'none';
+      return;
+    }
+    createRescue();
+    document.getElementById('ddOwnerRescueButton')?.style.setProperty('display', 'block');
+    document.getElementById('ddOwnerRescueVersion')?.style.setProperty('display', 'block');
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    refreshRescueVisibility();
+    setInterval(refreshRescueVisibility, 500);
+    navigator.serviceWorker?.getRegistrations?.().then(regs => regs.forEach(reg => reg.update().catch(() => {}))).catch(() => {});
+  });
 })();

@@ -1,13 +1,13 @@
-const CACHE='dd-tiktok-v18-1';
-const ASSETS=[
+const CACHE = 'dd-tiktok-v18-2-owner-recovery';
+const ASSETS = [
   './',
   './index.html',
   './manifest.webmanifest',
   './apple-touch-icon.png',
   './app-icon-192.png',
   './app-icon-512.png',
-  './backend-config.js?v=1801',
-  './app-cloud-bridge.js?v=1801'
+  './backend-config.js',
+  './app-cloud-bridge.js'
 ];
 
 self.addEventListener('install', event => {
@@ -26,11 +26,19 @@ self.addEventListener('activate', event => {
   );
 });
 
+self.addEventListener('message', event => {
+  if (event.data === 'SKIP_WAITING') self.skipWaiting();
+  if (event.data === 'CLEAR_CACHES') {
+    event.waitUntil(caches.keys().then(keys => Promise.all(keys.map(key => caches.delete(key)))));
+  }
+});
+
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
+  // HTML/JS/SWは常にネットワーク優先。更新失敗時だけキャッシュへ戻す。
   event.respondWith(
     fetch(event.request, { cache: 'no-store' })
       .then(response => {
@@ -41,7 +49,7 @@ self.addEventListener('fetch', event => {
         return response;
       })
       .catch(async () => {
-        const cached = await caches.match(event.request);
+        const cached = await caches.match(event.request, { ignoreSearch: true });
         return cached || caches.match('./index.html');
       })
   );
