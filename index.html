@@ -2118,6 +2118,37 @@ button:active,.status-card-link:active,.row[onclick]:active,.suggestitem:active{
 .owner-emergency-btn{display:block!important;width:100%!important;margin-top:14px!important;background:linear-gradient(135deg,#183e55,#0b2434)!important;color:#fff!important;border:1px solid rgba(219,183,83,.75)!important;box-shadow:0 10px 24px rgba(8,31,45,.24)!important;font-size:15px!important;padding:14px!important}
 html[data-owner-recovered="1"] #accessGate{display:none!important}
 </style>
+
+<style id="error-scroll-fix-v1">
+/* エラー詳細：一覧を最後まで縦スクロール可能にする */
+#errorOverlay{
+  align-items:flex-end;
+  overflow:hidden;
+}
+#errorOverlay .error-report-sheet{
+  display:flex;
+  flex-direction:column;
+  width:min(680px,100%);
+  height:min(88dvh,760px);
+  max-height:calc(100dvh - 28px);
+  overflow:hidden!important;
+}
+#errorOverlay .error-report-mast,
+#errorOverlay .error-report-summary,
+#errorOverlay .error-report-title{
+  flex:0 0 auto;
+}
+#errorOverlay #errorMonthList{
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  padding-bottom:calc(22px + env(safe-area-inset-bottom));
+  touch-action:pan-y;
+}
+</style>
 </head>
 <body>
 <div id="toast" class="toast"></div>
