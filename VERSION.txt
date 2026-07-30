@@ -1,3 +1,3 @@
-Ver24.3 error detail scroll fix
-Base: user uploaded index (build 24.2 restore capacity fix)
-Change: error monthly list scrolls to the bottom on mobile
+Ver24.4 error detail full-sheet scroll fix
+Base: Ver24.3 restore-compatible public build
+Change: the entire error detail card scrolls vertically to the final monthly record on mobile
