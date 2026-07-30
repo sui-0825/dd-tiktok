@@ -1,4 +1,4 @@
-const CACHE='dd-tiktok-v17-1-settings-admin-split';
+const CACHE='dd-tiktok-v17-2-gear-settings';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./app-icon.svg',
   './apple-touch-icon.png',
   './app-icon-192.png',

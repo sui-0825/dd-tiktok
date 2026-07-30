@@ -2297,7 +2297,7 @@ button:active,.status-card-link:active,.row[onclick]:active,.suggestitem:active{
 </section>
 
 <section id="history" class="screen">
-  <div class="topbar"><button class="iconbtn" onclick="go('home')">‹</button><div class="title">収支銀行</div><div><button class="iconbtn settings-gear" onclick="openAdminPage()" aria-label="管理者ページ"><span>⚙</span></button><button class="iconbtn" onclick="exportBackup()">⇩</button></div></div>
+  <div class="topbar"><button class="iconbtn" onclick="go('home')">‹</button><div class="title">収支銀行</div><div><button class="iconbtn settings-gear" onclick="go('settings')" aria-label="収支設定"><span>⚙</span></button><button class="iconbtn" onclick="exportBackup()">⇩</button></div></div>
   <div class="bank-masthead" aria-hidden="true">
     <div class="bank-emblem">D&amp;D</div>
     <div><small>PRIVATE WEALTH MANAGEMENT</small><b>D&amp;D ROYAL BANK</b><span>資産と利益を、ひと目で。</span></div>
@@ -2305,11 +2305,6 @@ button:active,.status-card-link:active,.row[onclick]:active,.suggestitem:active{
   </div>
   <div class="bank-ticker" aria-hidden="true"><span>PAYPAY PROFIT</span><i>◆</i><span>COMMUNICATION COST</span><i>◆</i><span>FINAL BALANCE</span></div>
   <div class="other-menu-grid">
-    <button class="other-menu-card" type="button" onclick="go('settings')">
-      <span class="other-menu-icon">⚙️</span>
-      <span><b>収支設定</b><small>月の通信費・月目標・総合初期投資</small></span>
-      <i>›</i>
-    </button>
     <button class="other-menu-card admin-link" type="button" onclick="openAdminPage()">
       <span class="other-menu-icon">👑</span>
       <span><b>管理者ページ</b><small>利用者承認・バックアップ・データ削除</small></span>
@@ -4708,7 +4703,7 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 #cloudStatusPill{position:fixed;right:10px;top:74px;z-index:9998;border:1px solid #d8c27b;background:rgba(255,252,241,.96);color:#183a52;border-radius:999px;padding:5px 9px;font:700 10px/1.2 system-ui;box-shadow:0 4px 14px rgba(0,0,0,.10);max-width:calc(100vw - 20px);transition:opacity .25s ease,transform .25s ease;white-space:nowrap}#cloudStatusPill.dd-cloud-hide{opacity:0;transform:translateY(-8px);pointer-events:none}
 #cloudStatusPill[data-mode="cloud"]{background:#eafaf1;color:#17633a}#cloudStatusPill[data-mode="error"]{background:#fff0f0;color:#9a2c2c}
 
-/* ===== Ver17.1 その他メニュー：設定と管理者を分離 ===== */
+/* ===== Ver17.2 右上ギアで収支設定・管理者カードのみ表示 ===== */
 .other-menu-grid{display:grid;grid-template-columns:1fr;gap:10px;margin:14px 18px 16px}
 .other-menu-card{width:100%;border:1px solid rgba(34,64,87,.12);background:rgba(255,255,255,.86);border-radius:20px;padding:15px 16px;display:grid;grid-template-columns:44px 1fr 18px;align-items:center;gap:10px;text-align:left;box-shadow:0 7px 20px rgba(40,49,56,.06);color:var(--ink)}
 .other-menu-card .other-menu-icon{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:#eef3ea;font-size:22px}
