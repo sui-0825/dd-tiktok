@@ -2774,7 +2774,7 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
     <div class="hotel-status" id="hotelStatus"><span></span>CHECKING IN...</div>
     <button id="accessRetryBtn" type="button" onclick="retryAccessCheck()">チェックイン状況を確認</button>
     <button id="ownerEmergencyBtn" class="owner-emergency-btn" type="button" onclick="openOwnerPin()">👑 オーナー暗証番号で入室</button>
-    <div style="margin-top:8px;font-size:11px;color:#a58a45;letter-spacing:.08em">Ver18.0</div>
+    <div style="margin-top:8px;font-size:11px;color:#a58a45;letter-spacing:.08em">Ver18.1</div>
     <div id="ownerPinPanel" class="owner-pin-panel" hidden>
       <small>OWNER ACCESS</small>
       <b>4桁の暗証番号</b>
@@ -4837,13 +4837,13 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 </style>
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
-<script src="./backend-config.js?v=173"></script>
-<script src="./app-cloud-bridge.js?v=173"></script>
+<script src="./backend-config.js?v=1801"></script>
+<script src="./app-cloud-bridge.js?v=1801"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const reg = await navigator.serviceWorker.register('./service-worker.js?v=17.5.4', { updateViaCache: 'none' });
+      const reg = await navigator.serviceWorker.register('./service-worker.js?v=18.0.1', { updateViaCache: 'none' });
       await reg.update();
     } catch (e) { console.warn(e); }
   });

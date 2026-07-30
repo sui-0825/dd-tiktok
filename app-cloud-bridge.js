@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver17.5.4 cloud bridge - owner PIN recovery */
+/* D&D❀TikTok Ver18.1 cloud bridge - owner fail-safe recovery */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -74,7 +74,71 @@ async function updateMember(userId,patch){if(!['owner','admin'].includes(state.r
 async function init(){if(!configured()){setStatus('設定不足・端末内保存','local','backend-config.jsの設定不足','config');return}try{setStatus('Supabaseへ接続中…','cloud','','connect');await ensureAuth();await verifyWorkspace();const name=getLocalUserName();if(name)await requestAccess(name);else{setStatus('名前を登録してください','cloud','','name-required');emitAccess()}}catch(e){console.error(e);setStatus(`接続失敗: ${String(e.message||'不明').slice(0,80)}`,'error',e.message,state.stage||'error')}}
 window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,getMembership,listMembers,updateMember,getPresenceByName,heartbeat,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),role:state.role,accessStatus:state.accessStatus}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
-window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(init,350)});
+
+
+// Ver18.1 fail-safe: even when an older cached index.html is displayed,
+// inject a fixed owner recovery control from this separately versioned script.
+function installOwnerFailSafe(){
+  if(document.getElementById('ddOwnerFailSafe'))return;
+  const style=document.createElement('style');
+  style.id='ddOwnerFailSafeStyle';
+  style.textContent=`
+    #ddOwnerFailSafe{position:fixed;left:16px;right:16px;bottom:82px;z-index:2147483646;display:none}
+    #accessGate.show~#ddOwnerFailSafe,#accessGate.show #ddOwnerFailSafe{display:block}
+    body.dd-access-blocked #ddOwnerFailSafe{display:block}
+    #ddOwnerFailSafe button{width:100%;border:1px solid rgba(229,198,110,.9);border-radius:16px;padding:15px 18px;background:linear-gradient(135deg,#163a53,#071e2d);color:#fff;font-size:15px;font-weight:900;box-shadow:0 12px 28px rgba(0,0,0,.3)}
+    #ddOwnerFailSafeDialog{position:fixed;inset:0;z-index:2147483647;display:none;align-items:center;justify-content:center;padding:22px;background:rgba(3,18,29,.78);backdrop-filter:blur(8px)}
+    #ddOwnerFailSafeDialog.show{display:flex}
+    #ddOwnerFailSafeDialog .box{width:min(360px,100%);background:#fffaf0;border:1px solid #dfbd58;border-radius:24px;padding:24px;text-align:center;box-shadow:0 26px 70px rgba(0,0,0,.42)}
+    #ddOwnerFailSafeDialog small{display:block;color:#9b7927;letter-spacing:.18em;font-weight:900}
+    #ddOwnerFailSafeDialog h3{margin:8px 0 14px;color:#17364c}
+    #ddOwnerFailSafeDialog input{width:150px;box-sizing:border-box;border:1px solid #d3b657;border-radius:13px;padding:11px;text-align:center;font-size:28px;letter-spacing:.3em}
+    #ddOwnerFailSafeDialog .err{min-height:20px;margin:8px 0;color:#a22;font-size:12px;font-weight:800}
+    #ddOwnerFailSafeDialog .actions{display:flex;gap:9px}
+    #ddOwnerFailSafeDialog .actions button{flex:1;border:0;border-radius:13px;padding:12px;font-weight:900}
+    #ddOwnerFailSafeDialog .cancel{background:#edf1f3;color:#345}
+    #ddOwnerFailSafeDialog .enter{background:linear-gradient(135deg,#b98212,#edcf67);color:#fff}
+  `;
+  document.head.appendChild(style);
+  const bar=document.createElement('div');
+  bar.id='ddOwnerFailSafe';
+  bar.innerHTML='<button type="button">👑 オーナー暗証番号で緊急入室 · Ver18.1</button>';
+  document.body.appendChild(bar);
+  const dialog=document.createElement('div');
+  dialog.id='ddOwnerFailSafeDialog';
+  dialog.innerHTML='<div class="box"><small>OWNER ACCESS</small><h3>4桁の暗証番号</h3><input type="password" inputmode="numeric" maxlength="4" placeholder="••••"><div class="err"></div><div class="actions"><button class="cancel" type="button">戻る</button><button class="enter" type="button">入室する</button></div></div>';
+  document.body.appendChild(dialog);
+  const input=dialog.querySelector('input'),err=dialog.querySelector('.err');
+  bar.querySelector('button').onclick=()=>{dialog.classList.add('show');input.value='';err.textContent='';setTimeout(()=>input.focus(),60)};
+  dialog.querySelector('.cancel').onclick=()=>dialog.classList.remove('show');
+  dialog.querySelector('.enter').onclick=async()=>{
+    const pin=String(input.value||'');
+    if(!/^\d{4}$/.test(pin)){err.textContent='4桁の数字を入力してください';return}
+    err.textContent='確認しています…';
+    try{
+      await ownerEmergencyUnlock(pin);
+      try{localStorage.setItem('dd_owner_role_permanent_v18','owner')}catch(_){}
+      document.documentElement.dataset.ownerRecovered='1';
+      document.body.classList.remove('dd-access-blocked');
+      document.getElementById('accessGate')?.classList.remove('show');
+      dialog.classList.remove('show');
+      bar.style.display='none';
+      if(typeof window.toast==='function')window.toast('👑 オーナーとして復旧しました');
+      if(typeof window.go==='function')window.go('home');
+      try{await pull();startPresence();refreshUI()}catch(e){console.warn(e)}
+    }catch(e){err.textContent=e?.message||'入室できませんでした';input.value='';input.focus()}
+  };
+  const sync=()=>{
+    const gate=document.getElementById('accessGate');
+    const blocked=Boolean(gate?.classList.contains('show'))&&state.accessStatus!=='approved';
+    document.body.classList.toggle('dd-access-blocked',blocked);
+    if(hasOwnerEmergencyUnlock())bar.style.display='none';
+  };
+  new MutationObserver(sync).observe(document.documentElement,{subtree:true,attributes:true,attributeFilter:['class']});
+  sync();
+}
+
+window.addEventListener('DOMContentLoaded',()=>{hookPersist();installOwnerFailSafe();setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved')heartbeat().catch(console.warn)});
 window.addEventListener('focus',()=>{if(state.accessStatus==='approved')heartbeat().catch(console.warn)});
 })();
