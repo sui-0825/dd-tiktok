@@ -1,3 +1,4 @@
-Ver25.1 all-detail scroll fix
-Base: Ver25.0 invite history cancellation
-Change: unified vertical scrolling for every detail sheet, overlay and dialog on mobile
+Ver25.2 device-detail daily table cleanup
+Base: Ver25.1 all-detail scroll fix
+Change: device detail daily table now shows date, increase, PayPay, discarded, pending, and errors only
+Removed: SIM-less and invite columns from the device detail daily table
