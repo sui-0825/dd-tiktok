@@ -241,16 +241,19 @@ border:1px solid var(--line);border-radius:21px;padding:4px 14px;box-shadow:0 6p
 .chart-label-takeout{fill:#d88923}
 .chart-label-double{fill:#4386db}
 .chart-label-partial{fill:#a765c7}
+.chart-label-partialtake{fill:#4386db}
 .chart-label-error{fill:#d85b5b}
 .chart-point-normal{fill:#fff;stroke:var(--sage3)}
 .chart-point-takeout{fill:#fff8ed;stroke:#d88923}
 .chart-point-double{fill:#eef6ff;stroke:#4386db}
 .chart-point-partial{fill:#faf1ff;stroke:#a765c7}
+.chart-point-partialtake{fill:#eef6ff;stroke:#4386db}
 .chart-point-error{fill:#f3f3f1;stroke:#d85b5b}
 .chart-segment-normal{stroke:var(--sage3)}
 .chart-segment-takeout{stroke:#d88923}
 .chart-segment-double{stroke:#4386db}
 .chart-segment-partial{stroke:#a765c7}
+.chart-segment-partialtake{stroke:#4386db}
 .chart-segment-error{stroke:#d85b5b}
 .chart-segment{fill:none;stroke-width:2.6;stroke-linecap:round}
 .chart-guide-label{font-size:8px;fill:var(--muted)}
@@ -290,6 +293,7 @@ border:1px solid var(--line);border-radius:21px;padding:4px 14px;box-shadow:0 6p
 .history-value.takeout{color:#d88923}
 .history-value.double{color:#4386db}
 .history-value.partial{color:#a765c7}
+.history-value.partialtake{color:#4386db}
 .history-value.error{display:inline;color:#d85b5b;background:transparent;padding:0;border-radius:0;font-size:inherit;font-weight:inherit;margin:0}
 
 
@@ -376,6 +380,7 @@ border:1px solid var(--line);border-radius:21px;padding:4px 14px;box-shadow:0 6p
 .sheet-cell.kind-take{color:#c18324;background:#fffaf0}
 .sheet-cell.kind-double{color:#357fae;background:#f3f9fd}
 .sheet-cell.kind-partial{color:#8b62a1;background:#faf6fc}
+.sheet-cell.kind-partialtake{color:#2f6fae;background:#eef6ff}
 .sheet-cell.kind-error{color:#bd5c59;background:#fff7f6}
 .sheet-cell.multi{position:relative}.sheet-cell.multi:after{content:attr(data-count);position:absolute;right:3px;top:3px;min-width:15px;height:15px;border-radius:999px;background:var(--sage3);color:#fff;font-size:9px;display:grid;place-items:center}
 .sheet-cell .parent-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#d9b778;vertical-align:middle;margin-right:4px}
@@ -2458,7 +2463,18 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
   <div class="sectiontitle"><h2>データ保護</h2></div>
   <div class="card settings-card">
     <button class="secondary" onclick="exportBackup()">JSONバックアップを書き出す</button>
-    <div class="field"><label>バックアップを復元</label><input id="restoreFile" type="file" accept="application/json" onchange="restoreBackup(event)"></div>
+    <div class="restore-mode-box">
+      <div class="restore-mode-tabs">
+        <button id="restoreModeFull" type="button" class="active" onclick="setRestoreMode('full')">全データ復元</button>
+        <button id="restoreModePartial" type="button" onclick="setRestoreMode('partial')">端末を部分復元</button>
+      </div>
+      <div id="restoreRange" class="restore-range hide">
+        <div class="field"><label>開始端末</label><input id="restoreStartDevice" type="number" inputmode="numeric" min="1" value="91"></div>
+        <div class="field"><label>終了端末（空欄＝最後まで）</label><input id="restoreEndDevice" type="number" inputmode="numeric" min="1" placeholder="最後まで"></div>
+      </div>
+      <div class="field"><label id="restoreFileLabel">バックアップを復元</label><input id="restoreFile" type="file" accept="application/json" onchange="restoreBackup(event)"></div>
+      <small id="restoreModeNote" class="restore-note">現在のデータをバックアップ内容に置き換えます。</small>
+    </div>
     <div class="delete-pin-box">
       <div class="delete-pin-head"><span>🔐 削除用暗証番号</span><b id="deletePinStatus">未設定</b></div>
       <div id="currentPinField" class="field"><label>現在の暗証番号</label><input id="currentDeletePin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="現在の暗証番号"></div>
@@ -3038,7 +3054,9 @@ function mountainLevel(amount){
 
 
 function chartKind(e){
+ const raw=String(entryDisplayRaw(e)||'');
  if(e.operation==='エラー'||e.isError)return 'error';
+ if(raw.includes('@')&&raw.endsWith('!'))return 'partialtake';
  if(e.operation==='継続交換')return 'double';
  if(e.operation==='部分交換')return 'partial';
  if(e.operation==='取り切り')return 'takeout';
@@ -3111,6 +3129,7 @@ function mountainChartHTML(entries){
     <span style="color:#d88923">● !</span>
     <span style="color:#4386db">● !!</span>
     <span style="color:#a765c7">● @</span>
+    <span style="color:#4386db">● @…!</span>
     <span style="color:#d85b5b">● -</span>
    </div>
   </div>`;
@@ -3161,7 +3180,9 @@ function mountainHistoryHTML(entries){
 
 
 function historyKind(e){
+ const raw=String(entryDisplayRaw(e)||'');
  if(e.operation==='エラー'||e.isError)return 'error';
+ if(raw.includes('@')&&raw.endsWith('!'))return 'partialtake';
  if(e.operation==='継続交換')return 'double';
  if(e.operation==='部分交換')return 'partial';
  if(e.operation==='取り切り')return 'takeout';
@@ -4096,6 +4117,7 @@ function annualCellKind(e){
  const raw=String(e?.raw||'');
  if(raw.endsWith('-'))return 'kind-error';
  if(raw.includes('!!'))return 'kind-double';
+ if(raw.includes('@')&&raw.endsWith('!'))return 'kind-partialtake';
  if(raw.includes('@'))return 'kind-partial';
  if(raw.includes('!'))return 'kind-take';
  return '';
@@ -4421,13 +4443,23 @@ function editEntry(id){
  try{parseInput(v);e.raw=normalizeRaw(v);recalcDevice(e.deviceId);toast('この端末の後続データを再計算しました');renderReport();renderHome()}catch(err){toast(err.message)}
 }
 
-const BACKUP_SCHEMA_VERSION=22;
-const PRE_RESTORE_KEY='dd_tiktok_pre_restore_backup_v22';
+const BACKUP_SCHEMA_VERSION=23;
+const PRE_RESTORE_KEY='dd_tiktok_pre_restore_backup_v23';
+let restoreMode='full';
+function setRestoreMode(mode){
+ restoreMode=mode==='partial'?'partial':'full';
+ document.getElementById('restoreModeFull')?.classList.toggle('active',restoreMode==='full');
+ document.getElementById('restoreModePartial')?.classList.toggle('active',restoreMode==='partial');
+ document.getElementById('restoreRange')?.classList.toggle('hide',restoreMode!=='partial');
+ const label=document.getElementById('restoreFileLabel'),note=document.getElementById('restoreModeNote');
+ if(label)label.textContent=restoreMode==='partial'?'部分復元するJSONを選択':'バックアップを復元';
+ if(note)note.textContent=restoreMode==='partial'?'指定した端末だけ追加・更新します。指定範囲外の端末・履歴・設定は消しません。':'現在のデータをバックアップ内容に置き換えます。';
+}
 function buildBackupPayload(){
  return {
   format:'D&D_TIKTOK_BACKUP',
   schemaVersion:BACKUP_SCHEMA_VERSION,
-  appBuild:'24.2',
+  appBuild:'25.27',
   exportedAt:new Date().toISOString(),
   data:JSON.parse(JSON.stringify(db))
  };
@@ -4454,53 +4486,86 @@ function normalizeBackupData(source){
  restored.version=Math.max(Number(x.version||0),101);
  return restored;
 }
+function partialRestoreRange(){
+ const start=Number(document.getElementById('restoreStartDevice')?.value||0);
+ const endRaw=String(document.getElementById('restoreEndDevice')?.value||'').trim();
+ const end=endRaw?Number(endRaw):Number.MAX_SAFE_INTEGER;
+ if(!Number.isInteger(start)||start<1)throw new Error('開始端末を1以上で入力してください');
+ if(!Number.isInteger(end)||end<start)throw new Error('終了端末は開始端末以上にしてください');
+ return{start,end};
+}
+function mergePartialBackup(restored,start,end){
+ const imported=restored.devices.filter(d=>{
+  if((d.type||'normal')==='parent')return false;
+  const n=deviceNumberFromName(d.name)??deviceNumberValue(d);
+  return Number.isFinite(n)&&n>=start&&n<=end;
+ });
+ if(!imported.length)throw new Error(`端末${start}以降の対象データがバックアップ内にありません`);
+ const idMap=new Map(),targetCurrentIds=new Set(),importedIds=new Set(imported.map(d=>d.id));
+ for(const src of imported){
+  const n=deviceNumberFromName(src.name)??deviceNumberValue(src);
+  let cur=db.devices.find(d=>(d.type||'normal')!=='parent'&&(deviceNumberFromName(d.name)??deviceNumberValue(d))===n);
+  if(!cur)cur=db.devices.find(d=>(d.type||'normal')!=='parent'&&String(d.name||'').trim()===String(src.name||'').trim());
+  if(cur){
+   const keepId=cur.id;
+   Object.assign(cur,JSON.parse(JSON.stringify(src)),{id:keepId});
+   idMap.set(src.id,keepId);targetCurrentIds.add(keepId);
+  }else{
+   const copy=JSON.parse(JSON.stringify(src));
+   if(db.devices.some(d=>d.id===copy.id))copy.id=uid();
+   db.devices.push(copy);idMap.set(src.id,copy.id);targetCurrentIds.add(copy.id);
+  }
+ }
+ const importedEntries=restored.entries.filter(e=>importedIds.has(e.deviceId));
+ const datesByCurrent=new Map();
+ for(const e of importedEntries){
+  const currentId=idMap.get(e.deviceId);if(!currentId)continue;
+  if(!datesByCurrent.has(currentId))datesByCurrent.set(currentId,new Set());
+  datesByCurrent.get(currentId).add(e.date);
+ }
+ // 同じ端末・同じ日だけ置換。バックアップにない日と範囲外データは残す。
+ db.entries=db.entries.filter(e=>!datesByCurrent.get(e.deviceId)?.has(e.date));
+ for(const e of importedEntries){
+  const copy=JSON.parse(JSON.stringify(e));copy.deviceId=idMap.get(e.deviceId);
+  if(db.entries.some(x=>x.id===copy.id))copy.id=uid();
+  db.entries.push(copy);
+ }
+ for(const id of targetCurrentIds){initDeviceGenerations(db.devices.find(d=>d.id===id));recalcDevice(id)}
+ db.version=101;
+ return{devices:imported.length,entries:importedEntries.length};
+}
 function restoreBackup(ev){
  const input=ev.target,f=input.files?.[0];if(!f)return;
  const r=new FileReader();
  r.onload=async()=>{
-  let previousDb=db;
+  const previousDb=JSON.parse(JSON.stringify(db));
   try{
    const parsed=JSON.parse(String(r.result||''));
    const restored=normalizeBackupData(parsed);
-   const restoredParents=restored.devices.filter(d=>(d.type||'normal')==='parent').length;
-   const restoredNormals=restored.devices.length-restoredParents;
-   if(!confirm(`保有端末 ${restoredNormals}台\n親機 ${restoredParents}台\n履歴 ${restored.entries.length}件\n\n基本チェックで問題は見つかりませんでした\n\n現在のデータを置き換えて復元します。続けますか？`))return;
-
-   // 大量データをlocalStorageへ二重保存すると容量超過になるため、
-   // 復元前データの丸ごと一時コピーは作らない。
-   try{localStorage.removeItem(PRE_RESTORE_KEY)}catch(_){}
-
-   db=restored;
-   db.devices.forEach(initDeviceGenerations);
-   recalculateStoredEntries(db);
-   db.version=101;
-
-   try{
-    persist();
-   }catch(storageError){
-    // 旧データ以外の不要な一時バックアップを除去して再試行
-    try{
-     localStorage.removeItem(PRE_RESTORE_KEY);
-     persist();
-    }catch(secondError){
-     db=previousDb;
-     throw new Error('端末の保存容量が不足しています。ブラウザのサイトデータ容量を確保してから再度お試しください。');
-    }
+   let message='';
+   if(restoreMode==='partial'){
+    const {start,end}=partialRestoreRange();
+    const target=restored.devices.filter(d=>(d.type||'normal')!=='parent').filter(d=>{const n=deviceNumberFromName(d.name)??deviceNumberValue(d);return Number.isFinite(n)&&n>=start&&n<=end});
+    const targetIds=new Set(target.map(d=>d.id));
+    const entryCount=restored.entries.filter(e=>targetIds.has(e.deviceId)).length;
+    const rangeText=end===Number.MAX_SAFE_INTEGER?`端末${start}〜最後まで`:`端末${start}〜${end}`;
+    if(!confirm(`${rangeText}\n対象端末 ${target.length}台・入力 ${entryCount}件\n\n指定範囲だけ追加・更新します。\n範囲外の端末・履歴・設定は消えません。続けますか？`))return;
+    const result=mergePartialBackup(restored,start,end);
+    message=`部分復元完了：端末${result.devices}台・入力${result.entries}件`;
+   }else{
+    const restoredParents=restored.devices.filter(d=>(d.type||'normal')==='parent').length;
+    const restoredNormals=restored.devices.length-restoredParents;
+    if(!confirm(`保有端末 ${restoredNormals}台\n親機 ${restoredParents}台\n履歴 ${restored.entries.length}件\n\n基本チェックで問題は見つかりませんでした\n\n現在のデータを置き換えて復元します。続けますか？`))return;
+    db=restored;db.devices.forEach(initDeviceGenerations);recalculateStoredEntries(db);db.version=101;
+    message=`復元完了：保有端末${restoredNormals}台・親機${restoredParents}台`;
    }
-
-   renderHome();renderSecuritySettings();
-   try{
-    if(window.DDCloud?.state?.accessStatus==='approved') await window.DDCloud.push();
-    else window.DDCloud?.queuePush?.();
-   }catch(err){console.warn('復元後クラウド保存:',err)}
-
-   toast(`復元完了：保有端末${restoredNormals}台・親機${restoredParents}台`);
-  }catch(e){
-   console.error('復元エラー:',e);
-   toast(e?.message||'バックアップを復元できませんでした');
-  }finally{
-   input.value='';
-  }
+   try{localStorage.removeItem(PRE_RESTORE_KEY)}catch(_){}
+   try{persist()}catch(storageError){db=previousDb;throw new Error('端末の保存容量が不足しています。ブラウザのサイトデータ容量を確保してから再度お試しください。')}
+   renderHome();renderSecuritySettings();renderAdminPage();
+   try{if(window.DDCloud?.state?.accessStatus==='approved')await window.DDCloud.push();else window.DDCloud?.queuePush?.()}catch(err){console.warn('復元後クラウド保存:',err)}
+   toast(message);
+  }catch(e){db=previousDb;console.error('復元エラー:',e);toast(e?.message||'バックアップを復元できませんでした')}
+  finally{input.value=''}
  };
  r.onerror=()=>{input.value='';toast('ファイルを読み込めませんでした')};
  r.readAsText(f);
@@ -5009,6 +5074,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 @media(max-width:380px){.hotel-card{padding-inline:18px!important}.hotel-card h2{font-size:24px!important}.welcome-copy h2{font-size:37px}.door-frame{height:61vh}}
 </style>
 <style id="v170-admin-style">
+.restore-mode-box{margin-top:12px;padding:13px;border:1px solid #dfe7ea;border-radius:16px;background:#f8fbfc}.restore-mode-tabs{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px}.restore-mode-tabs button{border:1px solid #d7e0e5;border-radius:11px;padding:10px 8px;background:#fff;color:#49616f;font-weight:850}.restore-mode-tabs button.active{background:#1c526d;color:#fff;border-color:#1c526d}.restore-range{display:grid;grid-template-columns:1fr 1fr;gap:8px}.restore-range.hide{display:none}.restore-note{display:block;margin-top:8px;color:#667983;font-size:11px;line-height:1.55}
 .admin-hero{margin:12px 16px;padding:20px;border-radius:24px;background:linear-gradient(145deg,#172f48,#244d68);color:#fff;display:flex;justify-content:space-between;align-items:center;box-shadow:0 12px 30px rgba(21,48,72,.18)}.admin-hero small{letter-spacing:.15em;opacity:.72}.admin-hero h2{margin:5px 0 4px;font-size:25px}.admin-hero p{margin:0;opacity:.86;font-size:13px}.admin-hero>span{font-size:42px}.admin-summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 16px 18px}.admin-summary-grid>div{background:#fff;border:1px solid #e6e9ec;border-radius:17px;padding:13px;text-align:center}.admin-summary-grid small{display:block;color:#69747d;font-size:11px}.admin-summary-grid b{font-size:24px;color:#173c55}.admin-member-list{margin:0 16px 20px;display:grid;gap:10px}.admin-member{background:#fff;border:1px solid #e4e9ed;border-radius:18px;padding:14px}.admin-member-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.admin-member-head b{font-size:16px}.admin-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}.admin-badge{font-size:10px;font-weight:800;padding:4px 7px;border-radius:999px;background:#edf3f6;color:#38566a}.admin-badge.pending{background:#fff5d9;color:#8a6500}.admin-badge.approved{background:#e7f8ee;color:#17633a}.admin-badge.suspended,.admin-badge.rejected{background:#ffe9e9;color:#9a2c2c}.admin-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}.admin-actions button{border:0;border-radius:11px;padding:9px 11px;font-weight:800;font-size:12px}.admin-actions .approve{background:#dff6e8;color:#17633a}.admin-actions .stop{background:#ffe8e8;color:#922}.admin-actions .role{background:#edf1f5;color:#28475d}.admin-actions .restore{background:#e9f3ff;color:#245b85}.admin-actions .reject{background:#f4f1f1;color:#6f4a4a}.admin-actions .delete{background:#fff0f0;color:#a12626;border:1px solid #f1caca}.admin-member.pending-card{border-color:#edcc69;background:#fffdf6}.admin-member.self-card{border-color:#c6a94e;background:#fffdf3}.admin-member-note{margin-top:9px;color:#7a858c;font-size:11px;line-height:1.5}.admin-empty-note{margin:0 16px 14px;padding:12px 14px;border-radius:15px;background:#f4f8fa;color:#55707e;font-size:12px;line-height:1.6}.access-gate{position:fixed;inset:0;z-index:20000;background:linear-gradient(160deg,#f7fbfd,#eef8f6);display:none;align-items:center;justify-content:center;padding:24px}.access-gate.show{display:flex}.access-card{width:min(420px,100%);background:#fff;border:1px solid #e0e8eb;border-radius:28px;padding:30px 24px;text-align:center;box-shadow:0 25px 60px rgba(28,54,72,.16)}.access-mark{font-size:42px}.access-card small{display:block;letter-spacing:.16em;color:#6b7b85;margin-top:8px}.access-card h2{margin:12px 0 8px;color:#173c55}.access-card p{color:#596974;line-height:1.7}.access-card button{border:0;border-radius:14px;padding:13px 20px;background:#1c526d;color:#fff;font-weight:800}.access-card button[hidden]{display:none}
 
 .owner-emergency-btn{margin-top:12px!important;background:transparent!important;color:#8b6c17!important;border:1px solid rgba(201,160,43,.45)!important;box-shadow:none!important}.owner-pin-panel{margin-top:14px;padding:16px;border-radius:18px;background:#fffaf0;border:1px solid #ead9a4}.owner-pin-panel[hidden]{display:none}.owner-pin-panel small{color:#a3832d;letter-spacing:.16em}.owner-pin-panel b{display:block;margin:7px 0 10px;color:#173c55}.owner-pin-panel input{width:150px;text-align:center;font-size:28px;letter-spacing:.35em;padding:10px;border:1px solid #d9c37d;border-radius:13px;background:#fff;outline:none}.owner-pin-error{min-height:20px;margin-top:8px;color:#a33;font-size:12px;font-weight:700}.owner-pin-actions{display:flex;gap:8px;justify-content:center;margin-top:8px}.owner-pin-actions button{min-width:105px}.owner-pin-actions button:first-child{background:#edf1f3;color:#345}.owner-pin-actions button:last-child{background:linear-gradient(135deg,#bf8b13,#efd36b);color:#fff}
@@ -5273,7 +5339,7 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
 <script src="./backend-config.js?v=2515"></script>
-<script src="./app-cloud-bridge.js?v=2515"></script>
+<script src="./app-cloud-bridge.js?v=2526"></script>
 <script>
 // Ver23.0: GitHub Pagesで更新を確実に反映するため、旧Service Workerとキャッシュを解除します。
 if ('serviceWorker' in navigator) {
@@ -5310,7 +5376,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.25';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.27';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();

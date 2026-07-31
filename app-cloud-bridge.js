@@ -157,7 +157,7 @@ async function requestAccess(displayName){
  if(!rawRow){
   const detail=String(rpcError?.message||'RPC応答なし');
   addDiag('DEVICE_BINDING_REQUIRED',detail);
-  throw new Error(`1端末1登録の設定を確認できません。SupabaseへVer25.25用SQLを適用してください｜${detail}`);
+  throw new Error(`1端末1登録の設定を確認できません。SupabaseへVer25.26用SQLを適用してください｜${detail}`);
  }
  if(!rawRow)throw new Error('利用申請の登録確認ができませんでした');
  rememberDeviceAccount();
