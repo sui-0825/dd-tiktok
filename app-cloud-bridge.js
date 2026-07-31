@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.26 one-device-one-user + removable registration */
+/* D&D❀TikTok Ver25.28 RPC verification fallback */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -155,11 +155,25 @@ async function requestAccess(displayName){
  // Ver25.25: 1端末1登録を守るため、RPC失敗時の直接INSERTは行わない。
  // 直接INSERTへ逃がすと同じ端末から別user_idが増えるため、SQL未適用時は明示的に停止する。
  if(!rawRow){
+  // Ver25.28: SupabaseのRPC確認が一時的に失敗しても、すでに登録済みの本人まで
+  // 接続不能にしない。現在のuser_idに既存membershipがある場合だけ安全に継続する。
+  // 新規利用者にはこの回避を使わないため、1端末1登録の保護は維持される。
+  try{
+   const existing=await getMembership();
+   if(existing){
+    rawRow=existing;
+    addDiag('RPC_FALLBACK_EXISTING_MEMBER',JSON.stringify(existing));
+    console.warn('Device RPC verification failed; existing membership used safely:',rpcError);
+   }
+  }catch(fallbackError){
+   addDiag('RPC_FALLBACK_FAIL',fallbackError.message);
+  }
+ }
+ if(!rawRow){
   const detail=String(rpcError?.message||'RPC応答なし');
   addDiag('DEVICE_BINDING_REQUIRED',detail);
-  throw new Error(`1端末1登録の設定を確認できません。SupabaseへVer25.26用SQLを適用してください｜${detail}`);
+  throw new Error(`1端末1登録の確認に失敗しました。新規登録は行わず停止しました｜${detail}`);
  }
- if(!rawRow)throw new Error('利用申請の登録確認ができませんでした');
  rememberDeviceAccount();
  addDiag('MEMBERSHIP_ROW',JSON.stringify(rawRow));
  const row=applyMembership(rawRow);
