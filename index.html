@@ -5013,7 +5013,18 @@ function openGearMenu(){document.getElementById('gearMenuBackdrop')?.classList.a
 function closeGearMenu(ev){if(ev && ev.target!==ev.currentTarget)return;document.getElementById('gearMenuBackdrop')?.classList.remove('show');document.body.style.overflow=''}
 window.addEventListener('keydown',e=>{if(e.key==='Escape')closeGearMenu()});
 
-function openAdminPage(){const s=window.DDCloud?.state||{};if(!['owner','admin'].includes(s.role)){toast(s.accessStatus==='approved'?'管理者のみ開けます':'承認後に利用できます');return}go('admin');renderAdminPage()}
+async function openAdminPage(){
+ const s=window.DDCloud?.state||{};
+ if(!['owner','admin'].includes(s.role)){toast(s.accessStatus==='approved'?'管理者のみ開けます':'承認後に利用できます');return}
+ go('admin');
+ if(s.role==='owner'&&!sessionStorage.getItem('dd_admin_pin_session')){
+  const pin=prompt('管理者ページを開くため、オーナー暗証番号4桁を入力してください');
+  if(pin===null){go('home');return}
+  if(!/^\d{4}$/.test(String(pin))){toast('4桁の数字を入力してください');go('home');return}
+  sessionStorage.setItem('dd_admin_pin_session',String(pin));
+ }
+ renderAdminPage();
+}
 function adminStatusOrder(status){return status==='pending'?0:status==='approved'?1:status==='suspended'?2:3}
 function adminMemberActions(m,currentRole){
  if(m.is_self||m.role==='owner')return '<div class="admin-member-note">このアカウントは保護されています。</div>';
@@ -5032,7 +5043,17 @@ async function renderAdminPage(silent=false){
  document.getElementById('adminIdentity').textContent=`${db.currentUser||'管理者'}・${s.role==='owner'?'オーナー':'管理者'}`;
  if(!silent&&!root.children.length)root.innerHTML='<div class="empty">利用者を読み込んでいます…</div>';
  try{
-  const rows=(await window.DDCloud.listMembers()).sort((a,b)=>adminStatusOrder(a.status)-adminStatusOrder(b.status)||Number(b.is_self)-Number(a.is_self)||String(a.display_name).localeCompare(String(b.display_name),'ja'));
+  let rows;
+  const adminPin=sessionStorage.getItem('dd_admin_pin_session')||'';
+  if(s.role==='owner'&&adminPin&&window.DDCloud?.listMembersByPin){
+   try{rows=await window.DDCloud.listMembersByPin(adminPin)}catch(pinErr){
+    sessionStorage.removeItem('dd_admin_pin_session');
+    throw new Error('暗証番号を確認できませんでした。管理者ページを開き直してください');
+   }
+  }else{
+   rows=await window.DDCloud.listMembers();
+  }
+  rows=rows.sort((a,b)=>adminStatusOrder(a.status)-adminStatusOrder(b.status)||Number(b.is_self)-Number(a.is_self)||String(a.display_name).localeCompare(String(b.display_name),'ja'));
   const hash=JSON.stringify(rows.map(m=>[m.user_id,m.display_name,m.status,m.role,Boolean(m.is_self)]));
   if(silent&&hash===ddAdminLastHash)return;
   ddAdminLastHash=hash;
@@ -5056,7 +5077,13 @@ startAdminAutoRefresh();
 async function adminSetMember(userId,patch,message){
  if(message&&!confirm(message))return;
  try{
-  await window.DDCloud.updateMember(userId,patch);
+  const s=window.DDCloud?.state||{};
+  const adminPin=sessionStorage.getItem('dd_admin_pin_session')||'';
+  if(s.role==='owner'&&adminPin&&window.DDCloud?.updateMemberByPin){
+   await window.DDCloud.updateMemberByPin(adminPin,userId,patch);
+  }else{
+   await window.DDCloud.updateMember(userId,patch);
+  }
   const label=patch.status==='approved'?'チェックインを許可しました':patch.status==='suspended'?'利用を停止しました':patch.status==='rejected'?'申請を拒否しました':patch.role==='admin'?'管理者に変更しました':patch.role==='member'?'一般利用者へ戻しました':'権限を更新しました';
   toast(label);await renderAdminPage();
  }catch(e){toast(e.message||'更新できませんでした')}
@@ -5146,8 +5173,8 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 </style>
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
-<script src="./backend-config.js?v=258"></script>
-<script src="./app-cloud-bridge.js?v=258"></script>
+<script src="./backend-config.js?v=2515"></script>
+<script src="./app-cloud-bridge.js?v=2515"></script>
 <script>
 // Ver23.0: GitHub Pagesで更新を確実に反映するため、旧Service Workerとキャッシュを解除します。
 if ('serviceWorker' in navigator) {
@@ -5184,7 +5211,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.12';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.15';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();

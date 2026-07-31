@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.12 visible check-in diagnostics */
+/* D&D❀TikTok Ver25.15 admin approval pin bridge */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -44,12 +44,48 @@ function saveOwnerPinLock(d){try{localStorage.setItem(OWNER_FAIL_KEY,JSON.string
 async function ownerEmergencyUnlock(pin){
   const lock=ownerPinLockState(),now=Date.now();
   if(lock.lockedUntil>now)throw new Error(`暗証番号がロック中です。あと${Math.ceil((lock.lockedUntil-now)/60000)}分お待ちください`);
-  const ok=(await sha256Hex(String(pin||'')))==='1b5dae7d0665b854991304a139eeb289021414897e69631761639958fc30a7bd';
-  if(!ok){const count=lock.count+1;if(count>=5){saveOwnerPinLock({count:0,lockedUntil:now+15*60*1000});throw new Error('5回間違えたため15分間ロックしました')}saveOwnerPinLock({count,lockedUntil:0});throw new Error(`暗証番号が違います（あと${5-count}回）`)}
-  try{localStorage.setItem(OWNER_UNLOCK_KEY,'1');localStorage.setItem('dd_owner_role_permanent_v18','owner');localStorage.removeItem(OWNER_FAIL_KEY)}catch(_){}
-  state.role='owner';state.accessStatus='approved';emitAccess();setStatus('オーナーとして緊急入室','cloud','','owner-unlocked');
-  try{if(state.user&&state.workspaceId)await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&user_id=eq.${encodeURIComponent(state.user.id)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({role:'owner',status:'approved',approved_at:new Date().toISOString(),approved_by:state.user.id})})}catch(e){console.warn('Owner role cloud update skipped:',e)}
-  try{await pull()}catch(e){console.warn(e)}startPresence();refreshUI();return true;
+
+  if(!state.user)await ensureAuth();
+  if(!state.workspaceId)await verifyWorkspace();
+
+  // サーバー側RPCで「今の匿名利用者ID」を正式なオーナーに結び直す。
+  // これにより、端末のセッションが変わっても管理者一覧が自分だけになる問題を防ぐ。
+  try{
+    const rows=await rpc('dd_owner_unlock',{
+      target_workspace:state.workspaceId,
+      owner_pin:String(pin||'')
+    });
+    const row=Array.isArray(rows)?rows[0]:rows;
+    if(!row||row.status!=='approved'||row.role!=='owner')throw new Error('オーナー登録を確認できませんでした');
+  }catch(serverError){
+    // 古いDB構成でも画面を完全に締め出さないため、従来の端末内照合を残す。
+    const ok=(await sha256Hex(String(pin||'')))==='1b5dae7d0665b854991304a139eeb289021414897e69631761639958fc30a7bd';
+    if(!ok){
+      const count=lock.count+1;
+      if(count>=5){
+        saveOwnerPinLock({count:0,lockedUntil:now+15*60*1000});
+        throw new Error('5回間違えたため15分間ロックしました');
+      }
+      saveOwnerPinLock({count,lockedUntil:0});
+      throw new Error(`暗証番号が違います（あと${5-count}回）`);
+    }
+    console.warn('Server owner binding failed; local fallback used:',serverError);
+  }
+
+  try{
+    localStorage.setItem(OWNER_UNLOCK_KEY,'1');
+    localStorage.setItem('dd_owner_role_permanent_v18','owner');
+    localStorage.removeItem(OWNER_FAIL_KEY);
+  }catch(_){}
+
+  state.role='owner';
+  state.accessStatus='approved';
+  emitAccess();
+  setStatus('オーナーとして接続','cloud','','owner-unlocked');
+  try{await pull()}catch(e){console.warn(e)}
+  startPresence();
+  refreshUI();
+  return true;
 }
 function applyMembership(row){
   const recoveryOwner=isOwnerRecoveryDevice();
@@ -188,7 +224,21 @@ async function recoverFromCloud(displayName,pin){
  refreshUI();
  return result;
 }
-window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,getPresenceByName,heartbeat,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.12',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+
+async function listMembersByPin(ownerPin){
+  if(!state.user)await ensureAuth();
+  if(!state.workspaceId)await verifyWorkspace();
+  const rows=await rpc('dd_admin_list_members_pin',{target_workspace:state.workspaceId,owner_pin:String(ownerPin||'')});
+  return Array.isArray(rows)?rows.map(m=>({...m,is_self:m.user_id===state.user?.id})):[];
+}
+async function updateMemberByPin(ownerPin,userId,patch){
+  if(!state.user)await ensureAuth();
+  if(!state.workspaceId)await verifyWorkspace();
+  const status=['approved','pending','suspended','rejected'].includes(patch?.status)?patch.status:null;
+  const role=['member','admin'].includes(patch?.role)?patch.role:null;
+  return rpc('dd_admin_update_member_pin',{target_workspace:state.workspaceId,owner_pin:String(ownerPin||''),target_user:userId,new_status:status,new_role:role});
+}
+window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,getPresenceByName,heartbeat,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.15',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved')heartbeat().catch(console.warn)});
