@@ -1,10 +1,10 @@
-/* D&D❀TikTok Ver25.7 approval bridge - visible pending requests + RPC admin approval */
+/* D&D❀TikTok Ver25.8 cloud seed + reliable hotel check-in polling */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
 const TOKEN_KEY='dd_supabase_anon_session_v2', LOCAL_USER_KEY='dd_tiktok_local_user_v1', OWNER_UNLOCK_KEY='dd_owner_emergency_unlock_v1', OWNER_FAIL_KEY='dd_owner_pin_fail_v1';
-const state={mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,presenceTimer:null,profileTimer:null,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true};
-const publicState=()=>({...state,syncTimer:undefined,presenceTimer:undefined,profileTimer:undefined,accessToken:undefined,user:state.user?{id:state.user.id}:null});
+const state={mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true};
+const publicState=()=>({...state,syncTimer:undefined,presenceTimer:undefined,profileTimer:undefined,accessTimer:undefined,accessToken:undefined,user:state.user?{id:state.user.id}:null});
 const emit=()=>window.dispatchEvent(new CustomEvent('dd-cloud-status',{detail:publicState()}));
 const emitAccess=()=>window.dispatchEvent(new CustomEvent('dd-access-state',{detail:publicState()}));
 function setStatus(status,mode=state.mode,error='',stage=state.stage){state.status=status;state.mode=mode;state.lastError=error||'';state.stage=stage||'';document.documentElement.dataset.storageMode=mode;document.documentElement.dataset.cloudStage=state.stage;emit()}
@@ -66,7 +66,52 @@ async function repairOwnerMembershipSafe(){
   }catch(e){console.warn('Owner membership repair skipped:',e);return false}
 }
 async function getMembership(){const rows=await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&user_id=eq.${encodeURIComponent(state.user.id)}&select=role,status,created_at&limit=1`);return applyMembership(Array.isArray(rows)?rows[0]:null)}
-async function requestAccess(displayName){if(!state.user)await ensureAuth();if(!state.workspaceId)await verifyWorkspace();const name=String(displayName||getLocalUserName()).trim();if(!name)throw new Error('名前を入力してください');setStatus('利用申請を確認中…','cloud','','access');const rows=await rpc('dd_request_access',{target_workspace:state.workspaceId,display_name:name});const row=applyMembership(Array.isArray(rows)?rows[0]:rows);if(state.role==='owner')await repairOwnerMembershipSafe();if(state.accessStatus==='approved'){setStatus(state.role==='owner'?'管理者として接続':'承認済み','cloud','','approved');const pulled=await pull();if(state.role==='owner'&&!pulled?.found&&hasMeaningfulLocalData()){state.recoveryProtected=false;setStatus('初回クラウド保存中…','cloud','','first-seed');await push()}startPresence();refreshUI()}else{setStatus(state.accessStatus==='pending'?'管理者の承認待ちです':state.accessStatus==='suspended'?'利用停止中です':'利用できません','cloud','',state.accessStatus);emitAccess()}return row}
+
+function stopAccessPolling(){clearInterval(state.accessTimer);state.accessTimer=null}
+function startAccessPolling(){
+ stopAccessPolling();
+ if(state.accessStatus!=='pending')return;
+ state.accessTimer=setInterval(async()=>{
+  try{
+   const before=state.accessStatus;
+   const row=await getMembership();
+   if(state.accessStatus==='approved'){
+    stopAccessPolling();
+    setStatus('チェックイン承認済み','cloud','','approved');
+    await pull();
+    startPresence();refreshUI();
+   }else if(state.accessStatus!==before){emitAccess()}
+  }catch(e){console.warn('access polling:',e)}
+ },4000);
+}
+async function requestAccess(displayName){
+ if(!state.user)await ensureAuth();
+ if(!state.workspaceId)await verifyWorkspace();
+ const name=String(displayName||getLocalUserName()).trim();
+ if(!name)throw new Error('名前を入力してください');
+ try{localStorage.setItem(LOCAL_USER_KEY,name)}catch(_){}
+ setStatus('利用申請を確認中…','cloud','','access');
+ const rows=await rpc('dd_request_access',{target_workspace:state.workspaceId,display_name:name});
+ const row=applyMembership(Array.isArray(rows)?rows[0]:rows);
+ if(state.role==='owner')await repairOwnerMembershipSafe();
+ if(state.accessStatus==='approved'){
+  stopAccessPolling();
+  setStatus(state.role==='owner'?'管理者として接続':'承認済み','cloud','','approved');
+  const pulled=await pull();
+  if(state.role==='owner'&&!pulled?.found&&hasMeaningfulLocalData()){
+   state.recoveryProtected=false;
+   setStatus('初回クラウド保存中…','cloud','','first-seed');
+   const seeded=await push();
+   if(!seeded?.ok)throw new Error('初回クラウド保存に失敗しました');
+  }
+  startPresence();refreshUI();
+ }else{
+  setStatus(state.accessStatus==='pending'?'管理者の承認待ちです':state.accessStatus==='suspended'?'利用停止中です':'利用できません','cloud','',state.accessStatus);
+  emitAccess();
+  if(state.accessStatus==='pending')startAccessPolling();
+ }
+ return row;
+}
 function mergeSharedMembers(names=[]){if(!window.db||typeof window.db!=='object')return;const local=getLocalUserName(),cur=Array.isArray(window.db.members)?window.db.members:[];window.db.members=[...new Set([...cur,...names,local].map(v=>String(v||'').trim()).filter(Boolean))];window.db.currentUser=local||String(window.db.currentUser||'').trim()}
 async function upsertProfileSafe(){const name=String(window.db?.currentUser||getLocalUserName()).trim();if(!name||!state.user)return;try{await rest('profiles?on_conflict=user_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:state.user.id,workspace_id:state.workspaceId,display_name:name,last_seen_at:new Date().toISOString()})})}catch(e){console.warn(e)}}
 async function pullProfilesSafe(){try{const rows=await rest(`profiles?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=user_id,display_name,last_seen_at&order=display_name.asc`);state.profiles=Array.isArray(rows)?rows:[];const names=state.profiles.map(r=>r?.display_name).filter(Boolean);state.applying=true;mergeSharedMembers(names);state.applying=false;window.dispatchEvent(new CustomEvent('dd-presence-update',{detail:{profiles:state.profiles}}));return names}catch(e){console.warn(e);return []}}
@@ -123,7 +168,7 @@ async function recoverFromCloud(displayName,pin){
 }
 window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,getPresenceByName,heartbeat,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),role:state.role,accessStatus:state.accessStatus}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
-window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(init,350)});
+window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved')heartbeat().catch(console.warn)});
 window.addEventListener('focus',()=>{if(state.accessStatus==='approved')heartbeat().catch(console.warn)});
 })();

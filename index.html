@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.1-all-detail-scroll-fix">
+<meta name="dd-build" content="25.8-cloud-checkin-sync">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -2873,6 +2873,8 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
 <script>
 const KEY='dd_tiktok_app_v14_production';
 let db=loadDB(), inviteParentId='', inviteCampaignResult=null, deviceFilter='all', reportMode='monthly', statusMode='active', statusListExpanded=false, monthlyView='summary', yearlyView='summary', generationView='all';
+// Ver25.8: クラウド橋から同じ本体データを読み書きできるように公開する。
+Object.defineProperty(window,'db',{configurable:true,get:()=>db,set:value=>{db=value&&typeof value==='object'?value:createEmptyDB();}});
 let missingPage=0, entryReturnContext=null;
 
 function loadDB(){
@@ -5021,6 +5023,16 @@ async function renderAdminPage(){
   root.innerHTML=rows.length?rows.map(m=>`<div class="admin-member ${m.status==='pending'?'pending-card':''} ${m.is_self?'self-card':''}"><div class="admin-member-head"><div><b>${esc(m.display_name)}</b><div class="admin-badges"><span class="admin-badge ${m.status}">${accessLabel(m.status)}</span><span class="admin-badge">${m.role==='owner'?'👑 オーナー':m.role==='admin'?'🛎️ 管理者':'👤 一般'}</span>${m.is_self?'<span class="admin-badge">あなた</span>':''}</div></div></div>${adminMemberActions(m,s.role)}</div>`).join(''):'<div class="empty">利用者はいません</div>';
  }catch(e){root.innerHTML=`<div class="empty">${esc(e.message||'読み込めませんでした')}</div>`}
 }
+let ddAdminRefreshTimer=null;
+function startAdminAutoRefresh(){
+ clearInterval(ddAdminRefreshTimer);
+ ddAdminRefreshTimer=setInterval(()=>{
+  if(document.getElementById('admin')?.classList.contains('active'))renderAdminPage();
+ },4000);
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&document.getElementById('admin')?.classList.contains('active'))renderAdminPage()});
+startAdminAutoRefresh();
+
 async function adminSetMember(userId,patch,message){
  if(message&&!confirm(message))return;
  try{
@@ -5114,8 +5126,8 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 </style>
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
-<script src="./backend-config.js?v=257"></script>
-<script src="./app-cloud-bridge.js?v=255"></script>
+<script src="./backend-config.js?v=258"></script>
+<script src="./app-cloud-bridge.js?v=258"></script>
 <script>
 // Ver23.0: GitHub Pagesで更新を確実に反映するため、旧Service Workerとキャッシュを解除します。
 if ('serviceWorker' in navigator) {
@@ -5143,7 +5155,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
 
 <script id="v255-hard-checkin-fix">
 (function(){
-  // Ver25.7: old Ver25.3 recovery overlay must never survive after deployment.
+  // Ver25.8: old Ver25.3 recovery overlay must never survive after deployment.
   const removeOldRecovery=()=>{
     document.getElementById('ddRecoveryPanel')?.remove();
     document.getElementById('v253-recovery-style')?.remove();
@@ -5152,7 +5164,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.7';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.8';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
