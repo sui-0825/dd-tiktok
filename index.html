@@ -2943,7 +2943,10 @@ function compactDBForStorage(source){
  out.storageFormat='compact-v1';
  return out;
 }
-function persist(){localStorage.setItem(KEY,JSON.stringify(compactDBForStorage(db)))}
+function persist(){
+ markAllScreensDirty();
+ localStorage.setItem(KEY,JSON.stringify(compactDBForStorage(db)))
+}
 window.compactDBForStorage=compactDBForStorage;
 function initDeviceGenerations(d){
  if(!Array.isArray(d.generations)||!d.generations.length){
@@ -3275,18 +3278,35 @@ function recalcDevice(id){
  persist();
 }
 
-function go(id){
- document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
- document.getElementById(id).classList.add('active');
- document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));
+// Ver25.21: メニュー切替を先に表示し、重い再描画は必要な時だけ次フレームで実行する。
+const screenDirty={home:true,settings:true,finalcheck:true,status:true,annual:true,devices:true,history:true};
+const screenRenderedAt={};
+let pendingScreenRender=0;
+function markAllScreensDirty(){Object.keys(screenDirty).forEach(k=>screenDirty[k]=true)}
+function activeScreenId(){return document.querySelector('.screen.active')?.id||'home'}
+function renderScreen(id,force=false){
+ const homeStale=id==='home'&&(Date.now()-(screenRenderedAt.home||0)>30000);
+ if(!force&&!screenDirty[id]&&!homeStale)return;
  if(id==='home')renderHome();
- if(id==='settings'){renderFinanceSettings();renderFinalCheck();renderSecuritySettings();}
- if(id==='finalcheck')renderFinalCheck();
- if(id==='status')renderStatusDetails();
- if(id==='annual')renderAnnual();
- if(id==='devices')renderDevices();
- if(id==='history')renderReport();
+ else if(id==='settings'){renderFinanceSettings();renderFinalCheck();renderSecuritySettings();}
+ else if(id==='finalcheck')renderFinalCheck();
+ else if(id==='status')renderStatusDetails();
+ else if(id==='annual')renderAnnual();
+ else if(id==='devices')renderDevices();
+ else if(id==='history')renderReport();
+ screenDirty[id]=false;screenRenderedAt[id]=Date.now();
+}
+function refreshActiveScreen(force=false){renderScreen(activeScreenId(),force)}
+window.markAllScreensDirty=markAllScreensDirty;
+window.refreshActiveScreen=refreshActiveScreen;
+function go(id){
+ const target=document.getElementById(id);if(!target)return;
+ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+ target.classList.add('active');
+ document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active',b.dataset.page===id));
  window.scrollTo(0,0);
+ cancelAnimationFrame(pendingScreenRender);
+ pendingScreenRender=requestAnimationFrame(()=>renderScreen(id));
 }
 function normalizeKana(s){
  return String(s||'').toLowerCase().normalize('NFKC')
@@ -5242,7 +5262,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.20';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.21';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
