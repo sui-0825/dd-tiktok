@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.25 durable sync + identity-safe profile bridge */
+/* D&D❀TikTok Ver25.26 one-device-one-user + removable registration */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -316,6 +316,13 @@ async function updateMemberByPin(ownerPin,userId,patch){
   const role=['member','admin'].includes(patch?.role)?patch.role:null;
   return rpc('dd_admin_update_member_pin',{target_workspace:state.workspaceId,owner_pin:String(ownerPin||''),target_user:userId,new_status:status,new_role:role});
 }
+async function deleteMemberByPin(ownerPin,userId){
+  if(!state.user)await ensureAuth();
+  if(!state.workspaceId)await verifyWorkspace();
+  if(!userId)throw new Error('利用者を特定できません');
+  if(userId===state.user?.id)throw new Error('自分自身は削除できません');
+  return rpc('dd_admin_delete_member_pin',{target_workspace:state.workspaceId,owner_pin:String(ownerPin||''),target_user:userId});
+}
 async function renameMemberByPin(ownerPin,userId,newName){
   if(!state.user)await ensureAuth();
   if(!state.workspaceId)await verifyWorkspace();
@@ -341,7 +348,7 @@ async function restoreCurrentOwnerByPin(ownerPin){
   await pullProfilesSafe();refreshUI();return row;
 }
 
-window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.25',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.26',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved')heartbeat().catch(console.warn)});
