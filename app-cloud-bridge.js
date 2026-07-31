@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.28 RPC verification fallback */
+/* D&D❀TikTok Ver25.29 device binding RPC fix */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -155,7 +155,7 @@ async function requestAccess(displayName){
  // Ver25.25: 1端末1登録を守るため、RPC失敗時の直接INSERTは行わない。
  // 直接INSERTへ逃がすと同じ端末から別user_idが増えるため、SQL未適用時は明示的に停止する。
  if(!rawRow){
-  // Ver25.28: SupabaseのRPC確認が一時的に失敗しても、すでに登録済みの本人まで
+  // Ver25.29: SupabaseのRPC確認が一時的に失敗しても、すでに登録済みの本人まで
   // 接続不能にしない。現在のuser_idに既存membershipがある場合だけ安全に継続する。
   // 新規利用者にはこの回避を使わないため、1端末1登録の保護は維持される。
   try{

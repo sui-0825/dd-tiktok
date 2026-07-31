@@ -4459,7 +4459,7 @@ function buildBackupPayload(){
  return {
   format:'D&D_TIKTOK_BACKUP',
   schemaVersion:BACKUP_SCHEMA_VERSION,
-  appBuild:'25.28',
+  appBuild:'25.29',
   exportedAt:new Date().toISOString(),
   data:JSON.parse(JSON.stringify(db))
  };
@@ -5376,7 +5376,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.28';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.29';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
