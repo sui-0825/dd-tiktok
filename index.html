@@ -2945,7 +2945,16 @@ function compactDBForStorage(source){
 }
 function persist(){
  markAllScreensDirty();
- localStorage.setItem(KEY,JSON.stringify(compactDBForStorage(db)))
+ const payload=JSON.stringify(compactDBForStorage(db));
+ try{
+  localStorage.setItem(KEY,payload);
+  localStorage.setItem('dd_last_local_save_v25',String(Date.now()));
+  return true;
+ }catch(e){
+  console.error('端末保存に失敗:',e);
+  toast('端末保存に失敗しました。入力は消さずに残しています');
+  throw e;
+ }
 }
 window.compactDBForStorage=compactDBForStorage;
 function initDeviceGenerations(d){
@@ -3278,7 +3287,7 @@ function recalcDevice(id){
  persist();
 }
 
-// Ver25.23: メニュー切替を先に表示し、重い再描画は必要な時だけ次フレームで実行する。
+// Ver25.24: メニュー切替を先に表示し、重い再描画は必要な時だけ次フレームで実行する。
 const screenDirty={home:true,settings:true,finalcheck:true,status:true,annual:true,devices:true,history:true};
 const screenRenderedAt={};
 let pendingScreenRender=0;
@@ -3354,6 +3363,7 @@ function selectEntryDevice(id){
  previewEntry();
  document.getElementById('entryRaw').focus();
  updateEntryKeyboardSave();
+ saveEntryDraft();
 }
 function clearEntryDevice(){
  document.getElementById('entryDevice').value='';
@@ -3361,6 +3371,26 @@ function clearEntryDevice(){
  resetMountain();
 }
 
+const ENTRY_DRAFT_KEY='dd_entry_draft_v25';
+function saveEntryDraft(){
+ try{
+  const draft={deviceId:document.getElementById('entryDevice')?.value||'',deviceSearch:document.getElementById('entryDeviceSearch')?.value||'',raw:document.getElementById('entryRaw')?.value||'',date:document.getElementById('entryDate')?.value||dkey(),operator:currentInputOperator||'',savedAt:Date.now()};
+  if(draft.deviceId||draft.deviceSearch||draft.raw)localStorage.setItem(ENTRY_DRAFT_KEY,JSON.stringify(draft));
+  else localStorage.removeItem(ENTRY_DRAFT_KEY);
+ }catch(_){ }
+}
+function loadEntryDraft(){try{return JSON.parse(localStorage.getItem(ENTRY_DRAFT_KEY)||'null')}catch(_){return null}}
+function clearEntryDraft(){try{localStorage.removeItem(ENTRY_DRAFT_KEY)}catch(_){}}
+function restoreEntryDraft(){
+ const d=loadEntryDraft();if(!d)return false;
+ if(d.date)document.getElementById('entryDate').value=d.date;
+ if(d.deviceId&&db.devices.some(x=>x.id===d.deviceId))selectEntryDevice(d.deviceId);
+ else if(d.deviceSearch)document.getElementById('entryDeviceSearch').value=d.deviceSearch;
+ if(d.raw)document.getElementById('entryRaw').value=d.raw;
+ previewEntry();updateEntryKeyboardSave();
+ if(d.raw||d.deviceId)toast('通信前の入力を復元しました');
+ return true;
+}
 function openEntry(preserveContext=false){
  if(!preserveContext)entryReturnContext=null;
  document.getElementById('entryDate').value=dkey();
@@ -3376,7 +3406,8 @@ function openEntry(preserveContext=false){
  document.getElementById('entryError').classList.remove('show');
  go('entry');
  updateEntryKeyboardSave();
- setTimeout(()=>document.getElementById('entryDeviceSearch').focus(),50);
+ const restored=restoreEntryDraft();
+ setTimeout(()=>document.getElementById(restored&&document.getElementById('entryDevice').value?'entryRaw':'entryDeviceSearch').focus(),50);
 }
 function appendSymbol(s){
  const i=document.getElementById('entryRaw');
@@ -3406,8 +3437,9 @@ function previewEntry(){
  }catch(e){err.textContent=e.message;err.classList.add('show')}
 }
 document.addEventListener('input',e=>{
- if(e.target.id==='entryRaw'){previewEntry();updateEntryKeyboardSave();}
- if(e.target.id==='entryDeviceSearch'){clearEntryDevice();renderDeviceSuggestions();updateEntryKeyboardSave();}
+ if(e.target.id==='entryRaw'){previewEntry();updateEntryKeyboardSave();saveEntryDraft();}
+ if(e.target.id==='entryDeviceSearch'){clearEntryDevice();renderDeviceSuggestions();updateEntryKeyboardSave();saveEntryDraft();}
+ if(e.target.id==='entryDate'){saveEntryDraft();}
 });
 
 document.addEventListener('blur',e=>{
@@ -3503,7 +3535,7 @@ function performEntrySave({deviceId,p,date,memo,operator='メイン',replaceEntr
    const dev=db.devices.find(x=>x.id===deviceId);if(dev)initDeviceGenerations(dev);db.entries.push({id:uid(),deviceId,generationId:dev?.currentGenerationId||'',date,month:date.slice(0,7),year:date.slice(0,4),timestamp:ts,memo,operator:operator||'メイン',...result});
    recalculateDevice(deviceId);
   }
-  persist();toast(replaceEntryId?'本日の入力を変更しました':'保存しました。次の入力へ進めます');
+  persist();clearEntryDraft();toast(replaceEntryId?'本日の入力を変更しました':'端末へ保存しました。同期は自動で続けます');
   const keepDate=document.getElementById('entryDate').value;
   document.getElementById('entryDevice').value='';
   document.getElementById('entryDeviceSearch').value='';
@@ -4860,7 +4892,7 @@ function formatMemberLastSeen(value){
  const d=Math.floor(h/24);return `最終ログイン ${d}日前`;
 }
 window.addEventListener('dd-presence-update',()=>{try{renderInputMembers();updateLoginIdentityUI()}catch(_){}});
-// Ver25.23: 時間表示を放置せず、一覧を開いている間も15秒ごとに再判定する。
+// Ver25.24: 時間表示を放置せず、一覧を開いている間も15秒ごとに再判定する。
 setInterval(()=>{try{const el=document.getElementById('concurrentInputOverlay');if(el?.classList.contains('show'))renderInputMembers()}catch(_){}},15000);
 function openMemberDirectory(){
  ensureLoginMember();renderInputMembers();updateLoginIdentityUI();window.DDCloud?.refreshMembers?.().catch(()=>{});
@@ -5264,7 +5296,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.23';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.24';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
