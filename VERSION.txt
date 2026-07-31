@@ -1,1 +1,3 @@
-26.0-indexeddb-safety-layer
+Ver25.1 all-detail scroll fix
+Base: Ver25.0 invite history cancellation
+Change: unified vertical scrolling for every detail sheet, overlay and dialog on mobile
