@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.8 cloud seed + reliable hotel check-in polling */
+/* D&D❀TikTok Ver25.10 new-device check-in diagnostics + fallback registration */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -91,8 +91,26 @@ async function requestAccess(displayName){
  if(!name)throw new Error('名前を入力してください');
  try{localStorage.setItem(LOCAL_USER_KEY,name)}catch(_){}
  setStatus('利用申請を確認中…','cloud','','access');
- const rows=await rpc('dd_request_access',{target_workspace:state.workspaceId,display_name:name});
- const row=applyMembership(Array.isArray(rows)?rows[0]:rows);
+ let rows=null,rpcError=null;
+ try{
+  rows=await rpc('dd_request_access',{target_workspace:state.workspaceId,display_name:name});
+ }catch(e){rpcError=e;console.warn('dd_request_access failed; trying own-row fallback:',e)}
+ let rawRow=Array.isArray(rows)?rows[0]:rows;
+ // 新規端末でRPCが失敗・空応答になった場合、自分自身の申請行だけを直接登録して再確認する。
+ if(!rawRow){
+  try{
+   await rest('workspace_members?on_conflict=workspace_id,user_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({workspace_id:state.workspaceId,user_id:state.user.id,role:'member',status:'pending',created_at:new Date().toISOString()})});
+   try{await rest('profiles?on_conflict=user_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:state.user.id,workspace_id:state.workspaceId,display_name:name,last_seen_at:new Date().toISOString()})})}catch(profileError){console.warn('profile fallback skipped:',profileError)}
+   const verify=await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&user_id=eq.${encodeURIComponent(state.user.id)}&select=role,status,created_at&limit=1`);
+   rawRow=Array.isArray(verify)?verify[0]:verify;
+  }catch(fallbackError){
+   const a=String(rpcError?.message||'RPC応答なし');
+   const b=String(fallbackError?.message||'申請登録失敗');
+   throw new Error(`新規利用申請を登録できませんでした｜RPC: ${a}｜登録: ${b}`);
+  }
+ }
+ if(!rawRow)throw new Error('利用申請の登録確認ができませんでした');
+ const row=applyMembership(rawRow);
  if(state.role==='owner')await repairOwnerMembershipSafe();
  if(state.accessStatus==='approved'){
   stopAccessPolling();

@@ -4989,9 +4989,10 @@ async function submitOwnerPin(){
 
 function playHotelWelcome(){const g=document.getElementById('accessGate'),w=document.getElementById('hotelWelcome');if(!g||!w){hideAccessGate();return}const name=String(db.currentUser||localStorage.getItem('dd_tiktok_local_user_v1')||'ゲスト').trim();document.getElementById('welcomeGuestName').textContent=name||'ゲスト';g.classList.add('show');w.classList.add('show');w.setAttribute('aria-hidden','false');clearTimeout(hotelWelcomeTimer);hotelWelcomeTimer=setTimeout(finishHotelWelcome,5200)}
 function finishHotelWelcome(){clearTimeout(hotelWelcomeTimer);document.getElementById('hotelWelcome')?.classList.remove('show');hideAccessGate();go('home')}
-async function retryAccessCheck(){try{const name=String(localStorage.getItem('dd_tiktok_local_user_v1')||'').trim();if(!name){hideAccessGate();showFirstLogin();return}showAccessGate('チェックイン状況を確認中','フロントへ確認しています。少々お待ちください。',false);await window.DDCloud?.requestAccess(name)}catch(e){showAccessGate('確認できませんでした',`${esc(e.message||'通信状態を確認してください')}<br>もう一度お試しください。`,true,'error') }}
+async function retryAccessCheck(){try{const name=String(localStorage.getItem('dd_tiktok_local_user_v1')||'').trim();if(!name){hideAccessGate();showFirstLogin();return}showAccessGate('チェックイン状況を確認中','フロントへ確認しています。少々お待ちください。',false);await window.DDCloud?.requestAccess(name)}catch(e){const d=window.DDCloud?.getDiagnostics?.()||{};showAccessGate('チェックインできませんでした',`${esc(e.message||'通信状態を確認してください')}<br><small style="display:block;margin-top:10px;letter-spacing:0;color:#8a4a4a;word-break:break-word">段階: ${esc(d.stage||'不明')}</small><br>この表示は消えません。もう一度お試しください。`,true,'error') }}
 window.addEventListener('dd-access-state',e=>{ddAccessState=e.detail||{};let ownerRecovered=false;try{ownerRecovered=localStorage.getItem('dd_owner_emergency_unlock_v1')==='1'||localStorage.getItem('dd_owner_role_permanent_v18')==='owner'}catch(_){}if(ownerRecovered){ddAccessState.role='owner';ddAccessState.accessStatus='approved';hideAccessGate();ddPreviousAccessStatus='approved';return}const s=ddAccessState.accessStatus;const becameApproved=s==='approved'&&ddPreviousAccessStatus==='pending';if(s==='approved'){if(becameApproved)playHotelWelcome();else hideAccessGate()}else if(s==='pending'){showAccessGate('チェックイン手続き中','オーナーがお部屋をご用意しています。<br>ラウンジでごゆっくりお待ちください。',true,'pending')}else if(s==='suspended'){showAccessGate('CHECK OUT','ご利用ありがとうございました。<br>再度ご利用の際はオーナーへお声がけください。',false,'suspended')}else if(s==='rejected'){showAccessGate('ご案内できませんでした','今回はチェックインを承認できませんでした。<br>オーナーへお問い合わせください。',false,'rejected')}ddPreviousAccessStatus=s;});
-const _completeFirstLoginV17=window.completeFirstLogin;window.completeFirstLogin=function(){_completeFirstLoginV17.apply(this,arguments);const name=String(localStorage.getItem('dd_tiktok_local_user_v1')||'').trim();if(name){showAccessGate('チェックイン手続き中','フロントへ利用申請を送っています。<br>少々お待ちください。',false,'pending');setTimeout(()=>window.DDCloud?.requestAccess(name).catch(e=>showAccessGate('チェックインできませんでした',esc(e.message||'通信状態を確認してください'),true,'error')),250)}};
+// Ver25.10: 初回登録側ですでに申請を送るため、二重送信しない。
+const _completeFirstLoginV17=window.completeFirstLogin;window.completeFirstLogin=function(){return _completeFirstLoginV17.apply(this,arguments)};
 
 function openGearMenu(){document.getElementById('gearMenuBackdrop')?.classList.add('show');document.body.style.overflow='hidden'}
 function closeGearMenu(ev){if(ev && ev.target!==ev.currentTarget)return;document.getElementById('gearMenuBackdrop')?.classList.remove('show');document.body.style.overflow=''}
@@ -5130,8 +5131,8 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 </style>
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
-<script src="./backend-config.js?v=258"></script>
-<script src="./app-cloud-bridge.js?v=258"></script>
+<script src="./backend-config.js?v=2510"></script>
+<script src="./app-cloud-bridge.js?v=2510"></script>
 <script>
 // Ver23.0: GitHub Pagesで更新を確実に反映するため、旧Service Workerとキャッシュを解除します。
 if ('serviceWorker' in navigator) {
@@ -5168,7 +5169,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.9';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.10';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
