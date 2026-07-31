@@ -2260,7 +2260,7 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
   </section>
 
   <section class="home-section">
-    <div class="home-section-title"><div><small>DEVICES</small><h2>稼働状況</h2></div><button onclick="go('status')">詳細 ›</button></div>
+    <div class="home-section-title"><div><small>DEVICES</small><h2>稼働状況</h2></div><button onclick="go('status')"><span id="homeDeviceTotal">合計 0台</span> ・ 詳細 ›</button></div>
     <div class="card wide status-card-link" onclick="go('status')">
       <div class="statusgrid">
         <div class="statusbox"><b id="activeCount">0</b><span>稼働</span></div>
@@ -3846,6 +3846,16 @@ function openHomeDevice(id){
  document.getElementById('homeSearchPanel')?.classList.remove('show');document.getElementById('homeDeviceSearch').value='';document.getElementById('homeSearchResults').innerHTML='';openDeviceDetail(id);
 }
 
+function deviceStatusSummary(){
+ const normal=db.devices.filter(d=>(d.type||'normal')!=='parent');
+ const parents=db.devices.filter(d=>(d.type||'normal')==='parent');
+ const active=normal.filter(d=>d.status==='active');
+ const waiting=normal.filter(d=>d.status==='waiting');
+ // active / waiting 以外は未稼働へ一本化し、3区分が必ず総台数と一致するようにする。
+ const inactive=normal.filter(d=>d.status!=='active'&&d.status!=='waiting');
+ return{normal,parents,active,waiting,inactive,total:normal.length};
+}
+
 function renderHome(){
  renderBulletins();
  const now=new Date(), today=dkey(now), month=mkey(now), year=ykey(now), t=db.entries.filter(e=>e.date===today), m=db.entries.filter(e=>e.month===month), y=db.entries.filter(e=>(e.year||e.date.slice(0,4))===year);
@@ -3880,9 +3890,11 @@ function renderHome(){
  document.getElementById('monthGoalBar').style.width=target>0?progressWidth(goalProgress):'0%';
  document.getElementById('investmentPercent').textContent=investment>0?percentText(recoveryProgress):'未設定';
  document.getElementById('investmentBar').style.width=investment>0?progressWidth(recoveryProgress):'0%';
- document.getElementById('activeCount').textContent=db.devices.filter(d=>(d.type||'normal')!=='parent'&&d.status==='active').length;
- document.getElementById('waitCount').textContent=db.devices.filter(d=>(d.type||'normal')!=='parent'&&d.status==='waiting').length;
- document.getElementById('inactiveCount').textContent=db.devices.filter(d=>(d.type||'normal')!=='parent'&&isNeverOperated(d)).length;
+ const deviceSummary=deviceStatusSummary();
+ document.getElementById('activeCount').textContent=deviceSummary.active.length;
+ document.getElementById('waitCount').textContent=deviceSummary.waiting.length;
+ document.getElementById('inactiveCount').textContent=deviceSummary.inactive.length;
+ document.getElementById('homeDeviceTotal')&&(document.getElementById('homeDeviceTotal').textContent=`合計 ${deviceSummary.total}台`);
  const missingToday=db.devices.filter(d=>(d.type||'normal')!=='parent'&&d.status==='active'&&!db.entries.some(e=>e.deviceId===d.id&&e.date===today)).length;
  document.getElementById('missingCount').textContent=missingToday;
  document.getElementById('todoMissingCount')&&(document.getElementById('todoMissingCount').textContent=missingToday+'台');
@@ -3909,11 +3921,12 @@ function getMissingDevices(date=missingDateValue()){
  return db.devices.filter(d=>(d.type||'normal')!=='parent'&&d.status==='active'&&!db.entries.some(e=>e.deviceId===d.id&&e.date===date));
 }
 function renderStatusDetails(){
- const normal=db.devices.filter(d=>(d.type||'normal')!=='parent');
+ const summary=deviceStatusSummary();
+ const normal=summary.normal;
  const today=dkey();
- const active=normal.filter(d=>d.status==='active');
- const waiting=normal.filter(d=>d.status==='waiting');
- const inactive=normal.filter(isNeverOperated);
+ const active=summary.active;
+ const waiting=summary.waiting;
+ const inactive=summary.inactive;
  const selectedDate=missingDateValue();
  const missing=getMissingDevices(selectedDate);
  const selectedActive=normal.filter(d=>d.status==='active');
@@ -5102,7 +5115,7 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
 <script src="./backend-config.js?v=254"></script>
-<script src="./app-cloud-bridge.js?v=254"></script>
+<script src="./app-cloud-bridge.js?v=255"></script>
 <script>
 // Ver23.0: GitHub Pagesで更新を確実に反映するため、旧Service Workerとキャッシュを解除します。
 if ('serviceWorker' in navigator) {
@@ -5127,5 +5140,22 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
 <!-- Ver25.4: 共同編集者はクラウド復元画面ではなく、通常のホテルチェックイン承認フローへ進みます。 -->
 
 
+
+<script id="v255-hard-checkin-fix">
+(function(){
+  // Ver25.6: old Ver25.3 recovery overlay must never survive after deployment.
+  const removeOldRecovery=()=>{
+    document.getElementById('ddRecoveryPanel')?.remove();
+    document.getElementById('v253-recovery-style')?.remove();
+    document.getElementById('v253-recovery-script')?.remove();
+  };
+  removeOldRecovery();
+  document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
+  const badge=document.createElement('div');
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.6';
+  badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
+  document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
+})();
+</script>
 </body>
 </html>
