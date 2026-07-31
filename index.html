@@ -3278,7 +3278,7 @@ function recalcDevice(id){
  persist();
 }
 
-// Ver25.22: メニュー切替を先に表示し、重い再描画は必要な時だけ次フレームで実行する。
+// Ver25.23: メニュー切替を先に表示し、重い再描画は必要な時だけ次フレームで実行する。
 const screenDirty={home:true,settings:true,finalcheck:true,status:true,annual:true,devices:true,history:true};
 const screenRenderedAt={};
 let pendingScreenRender=0;
@@ -4854,12 +4854,14 @@ function updateLoginIdentityUI(){
 function formatMemberLastSeen(value){
  if(!value)return '未接続';
  const diff=Math.max(0,Date.now()-new Date(value).getTime());
- if(diff<120000)return 'ONLINE';
+ if(diff<90000)return 'ONLINE';
  const min=Math.floor(diff/60000);if(min<60)return `最終ログイン ${min}分前`;
  const h=Math.floor(min/60);if(h<24)return `最終ログイン ${h}時間前`;
  const d=Math.floor(h/24);return `最終ログイン ${d}日前`;
 }
 window.addEventListener('dd-presence-update',()=>{try{renderInputMembers();updateLoginIdentityUI()}catch(_){}});
+// Ver25.23: 時間表示を放置せず、一覧を開いている間も15秒ごとに再判定する。
+setInterval(()=>{try{const el=document.getElementById('concurrentInputOverlay');if(el?.classList.contains('show'))renderInputMembers()}catch(_){}},15000);
 function openMemberDirectory(){
  ensureLoginMember();renderInputMembers();updateLoginIdentityUI();window.DDCloud?.refreshMembers?.().catch(()=>{});
  const overlay=document.getElementById('concurrentInputOverlay');if(overlay){overlay.classList.add('show');overlay.scrollTop=0}
@@ -5262,7 +5264,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.22';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.23';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
