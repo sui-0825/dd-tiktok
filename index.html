@@ -2837,7 +2837,7 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
     <div class="hotel-status" id="hotelStatus"><span></span>CHECKING IN...</div>
     <button id="accessRetryBtn" type="button" onclick="retryAccessCheck()">チェックイン状況を確認</button>
     <button id="ownerEmergencyBtn" class="owner-emergency-btn" type="button" onclick="openOwnerPin()">👑 オーナーはこちら（暗証番号）</button>
-    <div style="margin-top:8px;font-size:11px;color:#a58a45;letter-spacing:.08em">Ver24.2・大量履歴安定化版</div>
+    <div style="margin-top:8px;font-size:11px;color:#a58a45;letter-spacing:.08em">Ver24.5・大容量バックアップ復元対応版</div>
     <div id="ownerPinPanel" class="owner-pin-panel" hidden>
       <small>OWNER ACCESS</small>
       <b>4桁の暗証番号</b>
@@ -2878,11 +2878,11 @@ function loadDB(){
    x.finance=x.finance||{monthly:{},targets:{},initialInvestment:0};
    x.security=x.security||{};
    x.devices.forEach(initDeviceGenerations);
-   // 大量履歴対策: 毎回の全件再計算を廃止。旧データだけ初回に一度再計算する。
-   if(Number(x.version||0)<101){
+   // 圧縮保存データは起動時に計算項目を復元する。
+   const needsExpand=x.storageFormat==='compact-v1'||x.entries.some(e=>e.pending===undefined||e.increase===undefined);
+   if(needsExpand||Number(x.version||0)<101){
     recalculateStoredEntries(x);
     x.version=101;
-    localStorage.setItem(KEY,JSON.stringify(x));
    }
    return x;
   }
@@ -2925,7 +2925,17 @@ function recalculateStoredEntries(data){
  });
  data.version=101;
 }
-function persist(){localStorage.setItem(KEY,JSON.stringify(db))}
+function compactDBForStorage(source){
+ const out={...source};
+ out.entries=(source.entries||[]).map(e=>({
+  id:e.id,deviceId:e.deviceId,generationId:e.generationId||'gen1',date:e.date,
+  timestamp:e.timestamp,memo:e.memo||'',operator:e.operator||'',raw:e.raw||e.inputRaw||''
+ }));
+ out.storageFormat='compact-v1';
+ return out;
+}
+function persist(){localStorage.setItem(KEY,JSON.stringify(compactDBForStorage(db)))}
+window.compactDBForStorage=compactDBForStorage;
 function initDeviceGenerations(d){
  if(!Array.isArray(d.generations)||!d.generations.length){
   const first=db?.entries?.filter(e=>e.deviceId===d.id).map(e=>e.date).sort()[0]||d.statusSince||dkey();
