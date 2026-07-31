@@ -5123,5 +5123,43 @@ if ('serviceWorker' in navigator) {
 <script id="v141-cloud-ui">
 let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=document.getElementById('cloudStatusPill');if(!el)return;const d=e.detail||{};clearTimeout(ddCloudHideTimer);el.classList.remove('dd-cloud-hide');el.textContent=d.status||'端末内保存';el.dataset.mode=d.mode||'local';el.title=d.error||'';el.onclick=()=>{const x=window.DDCloud?.getDiagnostics?.()||d;alert('接続診断\n段階: '+(x.stage||'')+'\n状態: '+(x.status||'')+'\nエラー: '+(x.error||'なし')+'\nWorkspace: '+(x.workspaceId||''));};if((d.mode||'')==='cloud'){ddCloudHideTimer=setTimeout(()=>el.classList.add('dd-cloud-hide'),2200);}});
 </script>
+
+<style id="v253-recovery-style">
+#ddRecoveryPanel{position:fixed;inset:0;z-index:30000;background:rgba(5,18,29,.94);display:flex;align-items:center;justify-content:center;padding:18px;font-family:system-ui,-apple-system,sans-serif}
+#ddRecoveryPanel .card{width:min(430px,100%);background:#fff;border-radius:24px;padding:24px;box-shadow:0 24px 70px rgba(0,0,0,.5);text-align:center}
+#ddRecoveryPanel h2{margin:4px 0 10px;color:#173c55;font-size:24px}#ddRecoveryPanel p{font-size:13px;line-height:1.7;color:#5f6d76}
+#ddRecoveryPanel input{box-sizing:border-box;width:100%;padding:13px 14px;margin:6px 0;border:1px solid #d8e0e5;border-radius:12px;font-size:16px}
+#ddRecoveryPanel button{width:100%;margin-top:10px;padding:14px;border:0;border-radius:13px;background:#1f5d78;color:#fff;font-weight:900;font-size:15px}
+#ddRecoveryPanel .status{min-height:42px;margin-top:12px;padding:10px;border-radius:12px;background:#f3f7f9;color:#385469;font-size:12px;line-height:1.55}
+#ddRecoveryPanel .note{font-size:11px;color:#9a5b20;margin-top:10px}
+</style>
+<div id="ddRecoveryPanel">
+ <div class="card">
+  <div style="font-size:42px">🛟</div>
+  <h2>クラウド復元モード</h2>
+  <p>空の状態をクラウドへ保存しないよう、現在は保存を停止しています。以前使っていたお名前と、オーナー暗証番号を入力して復元します。</p>
+  <input id="ddRecoveryName" autocomplete="name" placeholder="以前使っていたお名前">
+  <input id="ddRecoveryPin" inputmode="numeric" maxlength="12" autocomplete="off" placeholder="オーナー暗証番号">
+  <button type="button" onclick="ddRunRecovery()">クラウドから復元する</button>
+  <div class="status" id="ddRecoveryStatus">まだデータは変更していません。</div>
+  <div class="note">復元が成功するまで、初回登録や新規入力は行わないでください。</div>
+ </div>
+</div>
+<script id="v253-recovery-script">
+async function ddRunRecovery(){
+ const btn=document.querySelector('#ddRecoveryPanel button'),st=document.getElementById('ddRecoveryStatus');
+ const name=document.getElementById('ddRecoveryName').value.trim(),pin=document.getElementById('ddRecoveryPin').value.trim();
+ if(!name||!pin){st.textContent='お名前とオーナー暗証番号を入力してください。';return}
+ btn.disabled=true;st.textContent='クラウドを確認しています。画面を閉じないでください…';
+ try{
+  const r=await window.DDCloud.recoverFromCloud(name,pin);
+  const devices=Array.isArray(window.db?.devices)?window.db.devices.length:(window.db?.devices&&typeof window.db.devices==='object'?Object.keys(window.db.devices).length:0);
+  st.textContent=`復元成功！クラウドのデータを読み込みました（端末データ ${devices}件）。`;
+  setTimeout(()=>{document.getElementById('ddRecoveryPanel').remove();location.reload()},1400);
+ }catch(e){st.textContent='復元できませんでした：'+(e?.message||e);btn.disabled=false}
+}
+window.addEventListener('DOMContentLoaded',()=>{try{const n=localStorage.getItem('dd_tiktok_local_user_v1')||'';document.getElementById('ddRecoveryName').value=n}catch(_){}});
+</script>
+
 </body>
 </html>

@@ -1,4 +1,2 @@
-Ver25.2 device-detail daily table cleanup
-Base: Ver25.1 all-detail scroll fix
-Change: device detail daily table now shows date, increase, PayPay, discarded, pending, and errors only
-Removed: SIM-less and invite columns from the device detail daily table
+D&D❀TikTok Ver25.3 クラウド復元保護版
+空データの自動保存を停止し、クラウド復元専用画面を追加。
