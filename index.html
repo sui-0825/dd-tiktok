@@ -5027,8 +5027,13 @@ async function openAdminPage(){
 }
 function adminStatusOrder(status){return status==='pending'?0:status==='approved'?1:status==='suspended'?2:3}
 function adminMemberActions(m,currentRole){
- if(m.is_self||m.role==='owner')return '<div class="admin-member-note">このアカウントは保護されています。</div>';
  const buttons=[];
+ if(currentRole==='owner')buttons.push(`<button class="role" onclick="adminRenameMember('${m.user_id}','${esc(m.display_name)}')">✏️ 名前を変更</button>`);
+ if(m.is_self){
+  if(m.role!=='owner'||m.status!=='approved')buttons.push(`<button class="approve" onclick="restoreMyOwnerState()">👑 オーナー状態に戻す</button>`);
+  return `<div class="admin-actions">${buttons.join('')}</div><div class="admin-member-note">このアカウントは保護されています。</div>`;
+ }
+ if(m.role==='owner')return `<div class="admin-actions">${buttons.join('')}</div><div class="admin-member-note">このアカウントは保護されています。</div>`;
  if(m.status!=='approved')buttons.push(`<button class="approve" onclick="adminSetMember('${m.user_id}',{status:'approved'},'${esc(m.display_name)}さんのチェックインを許可しますか？')">🚪 チェックインを許可</button>`);
  if(m.status==='approved')buttons.push(`<button class="stop" onclick="adminSetMember('${m.user_id}',{status:'suspended'},'${esc(m.display_name)}さんの利用を停止しますか？')">利用停止</button>`);
  if(m.status==='suspended'||m.status==='rejected')buttons.push(`<button class="restore" onclick="adminSetMember('${m.user_id}',{status:'approved'},'${esc(m.display_name)}さんの利用を再開しますか？')">利用を再開</button>`);
@@ -5036,6 +5041,32 @@ function adminMemberActions(m,currentRole){
  if(currentRole==='owner')buttons.push(`<button class="role" onclick="adminSetMember('${m.user_id}',{role:'${m.role==='admin'?'member':'admin'}'},'${esc(m.display_name)}さんを${m.role==='admin'?'一般利用者へ戻し':'管理者に変更し'}ますか？')">${m.role==='admin'?'一般へ戻す':'管理者にする'}</button>`);
  return buttons.length?`<div class="admin-actions">${buttons.join('')}</div>`:'';
 }
+
+async function adminRenameMember(userId,currentName){
+ const name=prompt('新しい名前を入力してください',currentName||'');
+ if(name===null)return;
+ const clean=String(name).trim();
+ if(!clean){toast('名前を入力してください');return}
+ if(clean.length>30){toast('名前は30文字以内にしてください');return}
+ try{
+  const pin=sessionStorage.getItem('dd_admin_pin_session')||'';
+  if(!pin)throw new Error('管理者ページを開き直して暗証番号を入力してください');
+  await window.DDCloud.renameMemberByPin(pin,userId,clean);
+  toast('名前を変更しました');
+  await renderAdminPage();
+ }catch(e){toast(e.message||'名前を変更できませんでした')}
+}
+async function restoreMyOwnerState(){
+ if(!confirm('この端末をオーナー・承認済みに戻しますか？'))return;
+ try{
+  const pin=sessionStorage.getItem('dd_admin_pin_session')||'';
+  if(!pin)throw new Error('管理者ページを開き直して暗証番号を入力してください');
+  await window.DDCloud.restoreCurrentOwnerByPin(pin);
+  toast('👑 オーナー状態に戻しました');
+  await renderAdminPage();
+ }catch(e){toast(e.message||'オーナー状態を戻せませんでした')}
+}
+
 let ddAdminLastHash='';
 async function renderAdminPage(silent=false){
  const root=document.getElementById('adminMemberList');if(!root)return;
@@ -5211,7 +5242,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.16';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.17';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
