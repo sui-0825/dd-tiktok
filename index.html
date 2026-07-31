@@ -1071,6 +1071,13 @@ button:active,.status-card-link:active,.row[onclick]:active,.suggestitem:active{
 .delete-pin-error{min-height:22px;margin-top:8px;color:#b75252;font-weight:700;text-align:center}
 .danger-confirm{background:linear-gradient(135deg,#bb5757,#8e3030)!important;color:#fff!important}
 @media(max-width:480px){.delete-pin-grid{grid-template-columns:1fr}}
+
+/* Ver25.0 招待取り消し */
+.invite-cancel-btn{border:0;border-radius:999px;padding:7px 10px;font-weight:800;font-size:12px;background:#fff0f2;color:#b4233c;box-shadow:inset 0 0 0 1px #f2b8c2;white-space:nowrap}
+.invite-cancel-btn:active{transform:scale(.97)}
+.invite-cancelled{opacity:.58;background:#f6f6f6!important}
+.invite-cancelled-badge{display:inline-flex;align-items:center;border-radius:999px;padding:4px 8px;background:#ececec;color:#777;font-weight:800;font-size:11px}
+.invite-record-actions{display:flex;align-items:center;gap:8px}
 </style>
 
 <style>
@@ -2837,7 +2844,7 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
     <div class="hotel-status" id="hotelStatus"><span></span>CHECKING IN...</div>
     <button id="accessRetryBtn" type="button" onclick="retryAccessCheck()">チェックイン状況を確認</button>
     <button id="ownerEmergencyBtn" class="owner-emergency-btn" type="button" onclick="openOwnerPin()">👑 オーナーはこちら（暗証番号）</button>
-    <div style="margin-top:8px;font-size:11px;color:#a58a45;letter-spacing:.08em">Ver24.5・大容量バックアップ復元対応版</div>
+    <div style="margin-top:8px;font-size:11px;color:#a58a45;letter-spacing:.08em">Ver25.0・招待取り消し対応版</div>
     <div id="ownerPinPanel" class="owner-pin-panel" hidden>
       <small>OWNER ACCESS</small>
       <b>4桁の暗証番号</b>
@@ -3623,7 +3630,7 @@ function campaignBadge(v){return `<span class="campaign-badge ${v===true?'succes
 let inviteHubMode='month';
 function setInviteHubMode(mode,btn){inviteHubMode=mode;renderInviteHub()}
 function inviteHubRows(){
- const all=db.invites||[],now=new Date(),today=dkey(now),month=mkey(now),year=ykey(now);
+ const all=activeInvites(),now=new Date(),today=dkey(now),month=mkey(now),year=ykey(now);
  if(inviteHubMode==='today')return all.filter(x=>x.date===today);
  if(inviteHubMode==='year')return all.filter(x=>String(x.date||'').startsWith(year));
  return all.filter(x=>String(x.date||'').startsWith(month));
@@ -3649,7 +3656,7 @@ function renderInviteHubDays(){
  body.innerHTML=dates.map(date=>{const items=rows.filter(x=>x.date===date),ok=items.filter(x=>x.campaign===true).length,ng=items.filter(x=>x.campaign===false).length;return `<details class="invite-hub-day" ${inviteHubMode==='today'?'open':''}><summary><span class="invite-hub-day-title"><b>${String(date).replaceAll('-','/')}</b><small>対象 ${ok}件・対象外 ${ng}件</small></span><span class="count-pill">${items.length}件</span></summary><div class="invite-hub-records">${items.sort((a,b)=>(b.timestamp||0)-(a.timestamp||0)).map(x=>{const d=db.devices.find(z=>z.id===x.deviceId),p=db.devices.find(z=>z.id===x.parentId),time=x.timestamp?new Date(x.timestamp).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'';return `<div class="invite-hub-record"><span><b>${esc(d?.name||'端末')}</b><small>${esc(p?.name||'親機未記録')}${time?'・'+time:''}</small></span>${campaignBadge(x.campaign)}</div>`}).join('')}</div></details>`}).join('')||'<div class="invite-hub-empty">この期間の招待記録はありません</div>';
 }
 function renderInviteHubYear(){
- const year=document.getElementById('inviteHubYearSelect')?.value||ykey(),parent=document.getElementById('inviteHubParentFilter')?.value||'',all=(db.invites||[]).filter(x=>String(x.date||'').startsWith(year)&&(!parent||x.parentId===parent));
+ const year=document.getElementById('inviteHubYearSelect')?.value||ykey(),parent=document.getElementById('inviteHubParentFilter')?.value||'',all=activeInvites().filter(x=>String(x.date||'').startsWith(year)&&(!parent||x.parentId===parent));
  const rows=[];for(let m=1;m<=12;m++){const key=`${year}-${String(m).padStart(2,'0')}`,items=all.filter(x=>String(x.date||'').startsWith(key)),ok=items.filter(x=>x.campaign===true).length,ng=items.filter(x=>x.campaign===false).length;rows.push({m,total:items.length,ok,ng,rate:items.length?ok/items.length*100:0})}
  document.getElementById('inviteHubBody').innerHTML=`<table class="invite-hub-month-table"><thead><tr><th>月</th><th>招待</th><th>対象</th><th>対象外</th><th>成功率</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.m}月</td><td>${r.total}件</td><td>${r.ok}件</td><td>${r.ng}件</td><td>${percentText(r.rate)}</td></tr>`).join('')}</tbody></table>`;
 }
@@ -3690,16 +3697,27 @@ function updateInviteSessionUI(){
  document.getElementById('inviteParentSelect').value=inviteParentId||'';
  document.getElementById('campaignSuccessBtn').classList.toggle('active',inviteCampaignResult===true);document.getElementById('campaignFailBtn').classList.toggle('active',inviteCampaignResult===false);const qs=document.getElementById('quickCampaignSuccess'),qf=document.getElementById('quickCampaignFail');if(qs)qs.classList.toggle('active',inviteCampaignResult===true);if(qf)qf.classList.toggle('active',inviteCampaignResult===false);
  const rate=document.getElementById('inviteLiveRate'),count=document.getElementById('inviteLiveCount');
- if(parent){const rows=(db.invites||[]).filter(x=>x.parentId===parent.id&&String(x.date||'').startsWith(mkey())),ok=rows.filter(x=>x.campaign===true).length;const r=rows.length?ok/rows.length*100:0;rate.textContent=percentText(r);count.textContent=`成功 ${ok}件 / 招待 ${rows.length}件`}else{rate.textContent='—';count.textContent='親機を選択'}
+ if(parent){const rows=activeInvites().filter(x=>x.parentId===parent.id&&String(x.date||'').startsWith(mkey())),ok=rows.filter(x=>x.campaign===true).length;const r=rows.length?ok/rows.length*100:0;rate.textContent=percentText(r);count.textContent=`成功 ${ok}件 / 招待 ${rows.length}件`}else{rate.textContent='—';count.textContent='親機を選択'}
 }
 function finishInviteSession(closeToo=false){inviteParentId='';inviteCampaignResult=null;const p=document.getElementById('inviteParentSelect');if(p)p.value='';const q=document.getElementById('inviteDeviceSearch');if(q)q.value='';updateInviteSessionUI();if(closeToo)closeOverlay('inviteOverlay');else{document.getElementById('inviteRegisterMessage').textContent='連続登録を終了しました。親機を選び直してください。';toast('招待登録を終了しました')}}
+function activeInvites(){return (db.invites||[]).filter(x=>!x.cancelled)}
+function cancelInvite(inviteId){
+ const inv=(db.invites||[]).find(x=>x.id===inviteId);if(!inv||inv.cancelled)return;
+ const d=db.devices.find(x=>x.id===inv.deviceId),p=db.devices.find(x=>x.id===inv.parentId);
+ const label=`${d?.name||'端末'} / ${String(inv.date||'').replaceAll('-','/')} / ${p?.name||'親機未記録'}`;
+ if(!confirm(`この招待を取り消しますか？\n\n${label}\n\n招待件数から除外し、履歴には「取り消し済み」として残します。`))return;
+ inv.cancelled=true;inv.cancelledAt=Date.now();
+ const remain=activeInvites().filter(x=>x.deviceId===inv.deviceId).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
+ if(d){d.inviteDate=remain[0]?.date||'';const hasEntry=(db.entries||[]).some(e=>e.deviceId===d.id&&String(e.date||'')>=String(inv.date||''));if(!remain.length&&!hasEntry&&d.status==='active')d.status='inactive'}
+ persist();renderInviteDetail();renderHome();updateInviteSessionUI();toast('招待を取り消しました');
+}
 function addInvite(){
  const q=document.getElementById('inviteDeviceSearch').value.trim(),date=document.getElementById('inviteDate').value||dkey();
  if(!inviteParentId){toast('親機を選択してください');return}if(!q){toast('端末を入力してください');return}if(inviteCampaignResult===null){toast('キャンペーン対象か対象外を選んでください');return}
  const norm=q.replace(/^端末/,'');const d=db.devices.find(x=>x.name===q||x.name===`端末${norm}`||String(x.name).includes(q));
  if(!d){toast('端末が見つかりません');return}if(d.type==='parent'){toast('親機は招待対象外です');return}if(d.id===inviteParentId){toast('同じ親機は登録できません');return}
- if(db.invites.some(x=>x.deviceId===d.id&&x.date===date)){toast('この端末は同じ日に登録済みです');return}
- db.invites.push({id:uid(),deviceId:d.id,parentId:inviteParentId,campaign:inviteCampaignResult,date,timestamp:Date.now()});d.status='active';d.everActive=true;d.inviteDate=date;persist();
+ if(activeInvites().some(x=>x.deviceId===d.id&&x.date===date)){toast('この端末は同じ日に登録済みです');return}
+ db.invites.push({id:uid(),deviceId:d.id,parentId:inviteParentId,campaign:inviteCampaignResult,date,timestamp:Date.now(),previousStatus:d.status||'inactive'});d.status='active';d.everActive=true;d.inviteDate=date;persist();
  const parent=db.devices.find(x=>x.id===inviteParentId),savedResult=inviteCampaignResult;document.getElementById('inviteDeviceSearch').value='';document.getElementById('inviteRegisterMessage').textContent=`✨ ${d.name} のチケットを登録しました。${parent?.name||'親機'}は固定中です。`;launchInviteSparkles();inviteCampaignResult=null;updateInviteSessionUI();renderInviteDetail();renderHome();
 }
 function showInviteTicket(device,parent,result,date){
@@ -3712,7 +3730,7 @@ function showInviteTicket(device,parent,result,date){
 }
 function closeInviteTicket(event){if(event&&event.target!==event.currentTarget)return;const ov=document.getElementById('inviteTicketOverlay');if(ov){ov.classList.remove('show');ov.setAttribute('aria-hidden','true')}}
 function inviteMonthRows(){
- const month=mkey();return (db.invites||[]).filter(x=>String(x.date||'').startsWith(month));
+ const month=mkey();return activeInvites().filter(x=>String(x.date||'').startsWith(month));
 }
 function renderInviteMonthDetails(){
  const mi=inviteMonthRows(),list=document.getElementById('inviteMonthList');if(!list)return;
@@ -3722,7 +3740,7 @@ function renderInviteMonthDetails(){
   const summary=document.getElementById('inviteFilterSummary');if(summary)summary.innerHTML='<span>日付別では全親機をまとめて表示</span><span>📅</span>';
   if(hint)hint.textContent='日付ごとに、その日の招待記録をまとめて確認できます';
   const dates=[...new Set(mi.map(x=>x.date))].sort().reverse();
-  list.innerHTML=dates.map(k=>{const items=mi.filter(x=>x.date===k),ok=items.filter(x=>x.campaign===true).length,ng=items.filter(x=>x.campaign===false).length;return `<div class="invite-day-card"><div class="invite-day-head"><div><b>${Number(k.slice(5,7))}/${Number(k.slice(8,10))}</b><div class="day-summary">成功 ${ok}件　対象外 ${ng}件</div></div><span class="count-pill">${items.length}件</span></div><div class="invite-day-detail">${items.map(x=>{const d=db.devices.find(z=>z.id===x.deviceId),p=db.devices.find(z=>z.id===x.parentId),time=x.timestamp?new Date(x.timestamp).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'';return `<div class="invite-record"><span><b>${esc(d?.name||'端末')}</b> <small>← ${esc(p?.name||'親機未記録')}${time?'・'+time:''}</small></span>${campaignBadge(x.campaign)}</div>`}).join('')}</div></div>`}).join('')||'<div class="invite-empty-play"><b>🌱 まだ記録がありません</b>最初の招待を登録すると、ここに育っていきます</div>';
+  list.innerHTML=dates.map(k=>{const items=mi.filter(x=>x.date===k),ok=items.filter(x=>x.campaign===true).length,ng=items.filter(x=>x.campaign===false).length;return `<div class="invite-day-card"><div class="invite-day-head"><div><b>${Number(k.slice(5,7))}/${Number(k.slice(8,10))}</b><div class="day-summary">成功 ${ok}件　対象外 ${ng}件</div></div><span class="count-pill">${items.length}件</span></div><div class="invite-day-detail">${items.map(x=>{const d=db.devices.find(z=>z.id===x.deviceId),p=db.devices.find(z=>z.id===x.parentId),time=x.timestamp?new Date(x.timestamp).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'';return `<div class="invite-record"><span><b>${esc(d?.name||'端末')}</b> <small>← ${esc(p?.name||'親機未記録')}${time?'・'+time:''}</small></span><span class="invite-record-actions">${campaignBadge(x.campaign)}<button type="button" class="invite-cancel-btn" onclick="cancelInvite('${x.id}')">取り消す</button></span></div>`}).join('')}</div></div>`}).join('')||'<div class="invite-empty-play"><b>🌱 まだ記録がありません</b>最初の招待を登録すると、ここに育っていきます</div>';
   return;
  }
  if(hint)hint.textContent=inviteParentFilter?'選んだ親機のカードをタップすると、招待端末と日付まで見られます':'親機を選ぶか、カードをタップすると招待した端末まで見られます';
@@ -3731,10 +3749,10 @@ function renderInviteMonthDetails(){
  const summary=document.getElementById('inviteFilterSummary');if(summary)summary.innerHTML=inviteParentFilter?`<span>🌿 ${esc(selectedParent?.name||'選択した親機')}だけ表示中</span><span>${mi.filter(x=>x.parentId===inviteParentFilter).length}件</span>`:'<span>すべての親機を表示中</span><span>🌱</span>';
  const ids=[...new Set(mi.map(x=>x.parentId))].filter(id=>!inviteParentFilter||id===inviteParentFilter);
  const groups=ids.map(id=>{const parent=db.devices.find(d=>d.id===id),items=mi.filter(x=>x.parentId===id).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0)),ok=items.filter(x=>x.campaign===true).length,ng=items.filter(x=>x.campaign===false).length;return {id,parent,items,ok,ng,rate:items.length?ok/items.length*100:0}}).sort((a,b)=>b.items.length-a.items.length||String(a.parent?.name||'').localeCompare(String(b.parent?.name||''),'ja'));
- list.innerHTML=groups.map(g=>`<details class="invite-parent-card" ${inviteParentFilter?'open':''}><summary><div><div class="invite-parent-name">🎟️ ${esc(g.parent?.name||'親機未記録')}</div><div class="invite-parent-stats"><span class="invite-stat-chip">招待 ${g.items.length}件</span><span class="invite-stat-chip good">対象 ${g.ok}件</span><span class="invite-stat-chip bad">対象外 ${g.ng}件</span></div></div><div class="invite-parent-rate"><small>成功率</small>${percentText(g.rate)}</div></summary><div class="invite-parent-records">${g.items.map(x=>{const d=db.devices.find(z=>z.id===x.deviceId),day=String(x.date||'').slice(5).replace('-','/'),time=x.timestamp?new Date(x.timestamp).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'';return `<div class="invite-parent-record"><div><b>${esc(d?.name||'端末')}</b><div class="meta">${day}${time?'・'+time:''}</div></div>${campaignBadge(x.campaign)}</div>`}).join('')}</div></details>`).join('')||'<div class="invite-empty-play"><b>🌱 まだ記録がありません</b>親機を選んで招待を登録してみよう</div>';
+ list.innerHTML=groups.map(g=>`<details class="invite-parent-card" ${inviteParentFilter?'open':''}><summary><div><div class="invite-parent-name">🎟️ ${esc(g.parent?.name||'親機未記録')}</div><div class="invite-parent-stats"><span class="invite-stat-chip">招待 ${g.items.length}件</span><span class="invite-stat-chip good">対象 ${g.ok}件</span><span class="invite-stat-chip bad">対象外 ${g.ng}件</span></div></div><div class="invite-parent-rate"><small>成功率</small>${percentText(g.rate)}</div></summary><div class="invite-parent-records">${g.items.map(x=>{const d=db.devices.find(z=>z.id===x.deviceId),day=String(x.date||'').slice(5).replace('-','/'),time=x.timestamp?new Date(x.timestamp).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'';return `<div class="invite-parent-record"><div><b>${esc(d?.name||'端末')}</b><div class="meta">${day}${time?'・'+time:''}</div></div><span class="invite-record-actions">${campaignBadge(x.campaign)}<button type="button" class="invite-cancel-btn" onclick="cancelInvite('${x.id}')">取り消す</button></span></div>`}).join('')}</div></details>`).join('')||'<div class="invite-empty-play"><b>🌱 まだ記録がありません</b>親機を選んで招待を登録してみよう</div>';
 }
 function renderInviteDetail(){
- const now=new Date(),year=ykey(now),all=db.invites||[],mi=inviteMonthRows(),yi=all.filter(x=>String(x.date||'').startsWith(year));
+ const now=new Date(),year=ykey(now),all=activeInvites(),mi=inviteMonthRows(),yi=all.filter(x=>String(x.date||'').startsWith(year));
  document.getElementById('inviteMonthTotal').textContent=mi.length+'件';document.getElementById('inviteYearTotal').textContent=yi.length+'件';const mOk=mi.filter(x=>x.campaign===true).length,mNg=mi.filter(x=>x.campaign===false).length,mRate=mi.length?mOk/mi.length*100:0;const sk=document.getElementById('inviteSummaryOk'),sn=document.getElementById('inviteSummaryNg'),sr=document.getElementById('inviteSummaryRate');if(sk)sk.textContent=mOk;if(sn)sn.textContent=mNg;if(sr)sr.textContent=percentText(mRate);renderInviteMonthDetails();
  const rows=[];for(let m=1;m<=12;m++){const key=`${year}-${String(m).padStart(2,'0')}`,items=yi.filter(x=>String(x.date||'').startsWith(key)),ok=items.filter(x=>x.campaign===true).length,ng=items.filter(x=>x.campaign===false).length;rows.push({m,total:items.length,ok,ng,rate:items.length?ok/items.length*100:0})}
  const totalOk=yi.filter(x=>x.campaign===true).length,totalNg=yi.filter(x=>x.campaign===false).length,totalRate=yi.length?totalOk/yi.length*100:0;
@@ -3769,14 +3787,14 @@ function openFinanceMonthFromYear(month){
  const noSimProfit=sum(entries.filter(e=>noSimIds.has(e.deviceId)),'profit'),target=monthTarget(month),goal=target>0?profit/target*100:null;
  document.getElementById('financeOverlay').classList.remove('home-hotel-detail');document.getElementById('financeDetailSubtitle').textContent='PRIVATE BANK・月次収支明細';
  document.getElementById('financeDetailTitle').textContent=`🗓 ${Number(month.slice(5,7))}月の収支詳細`;
- document.getElementById('financeDetailBody').innerHTML=`<div class="detail-kpis"><div class="detail-kpi"><small>増加分</small><b>${yen(sum(entries,'increase'))}</b></div><div class="detail-kpi"><small>PayPay実利益</small><b>${yen(profit)}</b></div><div class="detail-kpi"><small>捨てた分</small><b>${yen(sum(entries,'discarded'))}</b></div><div class="detail-kpi"><small>最新未確定</small><b>${yen(latest)}</b></div><div class="detail-kpi"><small>招待合計</small><b>${db.invites.filter(x=>x.date.startsWith(month)).length}件</b></div><div class="detail-kpi"><small>SIMなし実利益</small><b>${yen(noSimProfit)}</b></div><div class="detail-kpi"><small>月目標</small><b>${yen(target)}</b></div><div class="detail-kpi"><small>目標進捗</small><b>${target>0?percentText(goal):'未設定'}</b></div><div class="detail-kpi"><small>月通信費</small><b>${yen(monthFee(month))}</b></div></div><div class="detail-total"><span>通信費差引後</span><b>${yen(profit-monthFee(month))}</b></div>`;
+ document.getElementById('financeDetailBody').innerHTML=`<div class="detail-kpis"><div class="detail-kpi"><small>増加分</small><b>${yen(sum(entries,'increase'))}</b></div><div class="detail-kpi"><small>PayPay実利益</small><b>${yen(profit)}</b></div><div class="detail-kpi"><small>捨てた分</small><b>${yen(sum(entries,'discarded'))}</b></div><div class="detail-kpi"><small>最新未確定</small><b>${yen(latest)}</b></div><div class="detail-kpi"><small>招待合計</small><b>${activeInvites().filter(x=>x.date.startsWith(month)).length}件</b></div><div class="detail-kpi"><small>SIMなし実利益</small><b>${yen(noSimProfit)}</b></div><div class="detail-kpi"><small>月目標</small><b>${yen(target)}</b></div><div class="detail-kpi"><small>目標進捗</small><b>${target>0?percentText(goal):'未設定'}</b></div><div class="detail-kpi"><small>月通信費</small><b>${yen(monthFee(month))}</b></div></div><div class="detail-total"><span>通信費差引後</span><b>${yen(profit-monthFee(month))}</b></div>`;
 }
 function openFinanceDetail(mode){
  const now=new Date(),month=mkey(now),year=ykey(now),m=db.entries.filter(e=>(e.month||String(e.date||'').slice(0,7))===month),y=db.entries.filter(e=>(e.year||String(e.date||'').slice(0,4))===year),latest=db.devices.map(d=>latestPending(d.id)).reduce((a,b)=>a+b,0);const fees=Object.entries(db.finance?.monthly||{}).filter(([k])=>k.startsWith(year)).reduce((a,[,v])=>a+Number(v||0),0);const mp=sum(m,'profit'),yp=sum(y,'profit');const noSimIds=new Set(db.devices.filter(d=>d.sim==='なし').map(d=>d.id));const monthNoSimProfit=sum(m.filter(e=>noSimIds.has(e.deviceId)),'profit');const yearNoSimProfit=sum(y.filter(e=>noSimIds.has(e.deviceId)),'profit');
  const target=monthTarget(month),monthProgress=target>0?mp/target*100:null,investment=initialInvestment(),recovered=Math.max(0,yp-fees),recoveryProgress=investment>0?recovered/investment*100:null;
  const financeOverlay=document.getElementById('financeOverlay');financeOverlay.classList.add('home-hotel-detail');document.getElementById('financeDetailSubtitle').textContent=mode==='month'?'GUEST ACCOUNT・今月のご利用明細':'ANNUAL STATEMENT・年間ご利用明細';
  document.getElementById('financeDetailTitle').textContent=mode==='month'?'🗓 今月の収支詳細':'📈 今年の収支詳細';
- document.getElementById('financeDetailBody').innerHTML=mode==='month'?`<div class="detail-kpis"><div class="detail-kpi"><small>増加分</small><b>${yen(sum(m,'increase'))}</b></div><div class="detail-kpi"><small>PayPay実利益</small><b>${yen(mp)}</b></div><div class="detail-kpi"><small>捨てた分</small><b>${yen(sum(m,'discarded'))}</b></div><div class="detail-kpi"><small>最新未確定</small><b>${yen(latest)}</b></div><div class="detail-kpi"><small>招待合計</small><b>${db.invites.filter(x=>x.date.startsWith(month)).length}件</b></div><div class="detail-kpi"><small>SIMなし実利益</small><b>${yen(monthNoSimProfit)}</b></div><div class="detail-kpi"><small>月目標</small><b>${yen(target)}</b></div><div class="detail-kpi"><small>目標進捗</small><b>${target>0?percentText(monthProgress):'未設定'}</b></div><div class="detail-kpi"><small>月通信費</small><b>${yen(monthFee(month))}</b></div></div><div class="detail-total"><span>通信費差引後</span><b>${yen(mp-monthFee(month))}</b></div>`:`<div class="annual-summary"><div class="detail-kpi"><small>総合初期投資</small><b>${yen(investment)}</b></div><div class="detail-kpi"><small>初期投資回収進捗</small><b>${investment>0?percentText(recoveryProgress):'未設定'}</b></div><div class="detail-kpi"><small>年間通信費</small><b>${yen(fees)}</b></div><div class="detail-kpi"><small>年間PayPay実利益</small><b>${yen(yp)}</b></div></div><div class="detail-kpis"><div class="detail-kpi"><small>年間増加分</small><b>${yen(sum(y,'increase'))}</b></div><div class="detail-kpi"><small>年間捨てた分</small><b>${yen(sum(y,'discarded'))}</b></div><div class="detail-kpi"><small>最新未確定</small><b>${yen(latest)}</b></div><div class="detail-kpi"><small>年間SIMなし実利益</small><b>${yen(yearNoSimProfit)}</b></div><div class="detail-kpi"><small>年間招待</small><b>${db.invites.filter(x=>x.date.startsWith(year)).length}件</b></div><div class="detail-kpi"><small>回収済み相当額</small><b>${yen(recovered)}</b></div></div><div class="detail-total"><span>最終利益</span><b>${yen(yp-fees-investment)}</b></div><button class="collapse-btn" onclick="closeOverlay('financeOverlay');go('history');setTimeout(()=>{const yearlyBtn=[...document.querySelectorAll('#history > .tabs .tab')].find(b=>b.textContent.includes('年間推移'));if(yearlyBtn)setReportMode('yearly',yearlyBtn)},0)">その他の年間推移で詳しく見る ›</button>`;
+ document.getElementById('financeDetailBody').innerHTML=mode==='month'?`<div class="detail-kpis"><div class="detail-kpi"><small>増加分</small><b>${yen(sum(m,'increase'))}</b></div><div class="detail-kpi"><small>PayPay実利益</small><b>${yen(mp)}</b></div><div class="detail-kpi"><small>捨てた分</small><b>${yen(sum(m,'discarded'))}</b></div><div class="detail-kpi"><small>最新未確定</small><b>${yen(latest)}</b></div><div class="detail-kpi"><small>招待合計</small><b>${activeInvites().filter(x=>x.date.startsWith(month)).length}件</b></div><div class="detail-kpi"><small>SIMなし実利益</small><b>${yen(monthNoSimProfit)}</b></div><div class="detail-kpi"><small>月目標</small><b>${yen(target)}</b></div><div class="detail-kpi"><small>目標進捗</small><b>${target>0?percentText(monthProgress):'未設定'}</b></div><div class="detail-kpi"><small>月通信費</small><b>${yen(monthFee(month))}</b></div></div><div class="detail-total"><span>通信費差引後</span><b>${yen(mp-monthFee(month))}</b></div>`:`<div class="annual-summary"><div class="detail-kpi"><small>総合初期投資</small><b>${yen(investment)}</b></div><div class="detail-kpi"><small>初期投資回収進捗</small><b>${investment>0?percentText(recoveryProgress):'未設定'}</b></div><div class="detail-kpi"><small>年間通信費</small><b>${yen(fees)}</b></div><div class="detail-kpi"><small>年間PayPay実利益</small><b>${yen(yp)}</b></div></div><div class="detail-kpis"><div class="detail-kpi"><small>年間増加分</small><b>${yen(sum(y,'increase'))}</b></div><div class="detail-kpi"><small>年間捨てた分</small><b>${yen(sum(y,'discarded'))}</b></div><div class="detail-kpi"><small>最新未確定</small><b>${yen(latest)}</b></div><div class="detail-kpi"><small>年間SIMなし実利益</small><b>${yen(yearNoSimProfit)}</b></div><div class="detail-kpi"><small>年間招待</small><b>${activeInvites().filter(x=>x.date.startsWith(year)).length}件</b></div><div class="detail-kpi"><small>回収済み相当額</small><b>${yen(recovered)}</b></div></div><div class="detail-total"><span>最終利益</span><b>${yen(yp-fees-investment)}</b></div><button class="collapse-btn" onclick="closeOverlay('financeOverlay');go('history');setTimeout(()=>{const yearlyBtn=[...document.querySelectorAll('#history > .tabs .tab')].find(b=>b.textContent.includes('年間推移'));if(yearlyBtn)setReportMode('yearly',yearlyBtn)},0)">その他の年間推移で詳しく見る ›</button>`;
  document.getElementById('financeOverlay').classList.add('show');
 }
 function settingsMonthKey(){
@@ -3850,7 +3868,7 @@ function renderHome(){
  document.getElementById('todayPending').textContent=yen(latest.reduce((a,b)=>a+b,0));
  document.getElementById('todayDiscard').textContent=yen(sum(t,'discarded'));
  document.getElementById('todayTakeouts').textContent=t.filter(e=>e.operation==='取り切り').length+'件';
- document.getElementById('todayInvites').textContent=db.invites.filter(x=>x.date===today).length+'件';
+ document.getElementById('todayInvites').textContent=activeInvites().filter(x=>x.date===today).length+'件';
  document.getElementById('todayErrors').textContent=t.filter(isErrorEntry).length+'件';
  const mp=sum(m,'profit'),yp=sum(y,'profit');const yearlyFees=Object.entries(db.finance?.monthly||{}).filter(([k])=>k.startsWith(year)).reduce((a,[,v])=>a+Number(v||0),0);
  document.getElementById('monthProfit').textContent=yen(mp);
@@ -3868,7 +3886,7 @@ function renderHome(){
  const missingToday=db.devices.filter(d=>(d.type||'normal')!=='parent'&&d.status==='active'&&!db.entries.some(e=>e.deviceId===d.id&&e.date===today)).length;
  document.getElementById('missingCount').textContent=missingToday;
  document.getElementById('todoMissingCount')&&(document.getElementById('todoMissingCount').textContent=missingToday+'台');
- document.getElementById('todoInviteCount')&&(document.getElementById('todoInviteCount').textContent=db.invites.filter(x=>x.date===today).length+'件');
+ document.getElementById('todoInviteCount')&&(document.getElementById('todoInviteCount').textContent=activeInvites().filter(x=>x.date===today).length+'件');
 }
 
 
@@ -4118,7 +4136,7 @@ function openDeviceDetail(id){
  document.getElementById('deviceDetailId').value=id;
  document.getElementById('deviceDetailTitle').textContent='端末詳細';
  const periodForIdentity=statusPeriod(d);
- const latestCampaignInvite=(db.invites||[]).filter(x=>x.deviceId===d.id).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0))[0];
+ const latestCampaignInvite=activeInvites().filter(x=>x.deviceId===d.id).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0))[0];
  const campaignMark=(d.type||'normal')==='parent'?'':latestCampaignInvite?.campaign===true?'<span class="invite-target-mark target">✦ キャンペーン対象</span>':latestCampaignInvite?.campaign===false?'<span class="invite-target-mark outside">◇ キャンペーン対象外</span>':'<span class="invite-target-mark unknown">○ 判定未登録</span>';
  document.getElementById('deviceDetailIdentity').innerHTML=`<div class="device-identity-icon">${String(d.name||'端末').replace(/[^0-9]/g,'').slice(-2)||'D'}</div><div class="device-identity-main"><div class="device-identity-name">${d.name}<span class="device-badge sim">SIM${d.sim||'あり'}</span><span class="device-badge state">${(d.type||'normal')==='parent'?'親機':periodForIdentity.label+'中'}</span></div><div class="device-identity-sub"><span>${d.inviteDate?'招待日：'+d.inviteDate:'保有端末'}</span>${campaignMark}${d.memo?' <span>・ '+d.memo+'</span>':''}</div></div>`;
  initDeviceGenerations(d);generationView='all';document.getElementById('genViewAll').classList.add('active');document.getElementById('genViewCurrent').classList.remove('active');const entries=db.entries.filter(e=>e.deviceId===id);
@@ -4136,7 +4154,7 @@ function openDeviceDetail(id){
  document.getElementById('deviceDetailSheet').classList.add('show');
 }
 function renderDeviceInviteInsight(d){
- const box=document.getElementById('deviceInviteInsight');if(!box)return;const all=db.invites||[];
+ const box=document.getElementById('deviceInviteInsight');if(!box)return;const all=activeInvites();
  if((d.type||'normal')==='parent'){
   box.innerHTML=`<div class="parent-strength-card"><b>招待の強さ（成功率）</b><div class="parent-strength-tabs"><button class="active" onclick="renderParentStrength('${d.id}','month',this)">今月</button><button onclick="renderParentStrength('${d.id}','today',this)">今日</button><button onclick="renderParentStrength('${d.id}','year',this)">今年</button><button onclick="renderParentStrength('${d.id}','all',this)">全期間</button></div><div id="parentStrengthDynamic"></div></div>`;renderParentStrength(d.id,'month');return;
  }
@@ -4148,14 +4166,14 @@ function openDeviceInviteDetail(deviceId){
  const d=db.devices.find(x=>x.id===deviceId);if(!d)return;const rows=(db.invites||[]).filter(x=>x.deviceId===deviceId).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
  const latest=rows.find(x=>x.campaign===true||x.campaign===false)||rows[0];const p=latest&&db.devices.find(x=>x.id===latest.parentId);const mountain=latestPending(deviceId)>0;
  document.getElementById('deviceInviteDetailSub').textContent=`${d.name} の招待記録`;
- document.getElementById('deviceInviteDetailBody').innerHTML=latest?`<div class="invite-detail-card"><h3>${esc(d.name)}の現在の招待情報</h3><div class="invite-detail-grid"><div class="invite-detail-item"><small>招待した親機</small><b>${esc(p?.name||'未記録')}</b></div><div class="invite-detail-item"><small>スクラッチ結果</small><b>${campaignLabel(latest.campaign)}</b></div><div class="invite-detail-item"><small>招待日</small><b>${String(latest.date||'未記録').replaceAll('-','/')}</b></div><div class="invite-detail-item"><small>山の状態</small><b>${mountain?'継続中':'終了'}</b></div></div><div class="invite-detail-history">${rows.map(x=>{const parent=db.devices.find(z=>z.id===x.parentId),time=x.timestamp?new Date(x.timestamp).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'';return `<div class="invite-detail-row"><span>${String(x.date||'').replaceAll('-','/')} ${time}</span><span>${esc(parent?.name||'親機未記録')}・${campaignLabel(x.campaign)}</span></div>`}).join('')}</div></div>`:'<div class="empty">招待記録はありません</div>';
+ document.getElementById('deviceInviteDetailBody').innerHTML=latest?`<div class="invite-detail-card"><h3>${esc(d.name)}の現在の招待情報</h3><div class="invite-detail-grid"><div class="invite-detail-item"><small>招待した親機</small><b>${esc(p?.name||'未記録')}</b></div><div class="invite-detail-item"><small>スクラッチ結果</small><b>${campaignLabel(latest.campaign)}</b></div><div class="invite-detail-item"><small>招待日</small><b>${String(latest.date||'未記録').replaceAll('-','/')}</b></div><div class="invite-detail-item"><small>山の状態</small><b>${mountain?'継続中':'終了'}</b></div></div><div class="invite-detail-history">${rows.map(x=>{const parent=db.devices.find(z=>z.id===x.parentId),time=x.timestamp?new Date(x.timestamp).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'}):'';return `<div class="invite-detail-row ${x.cancelled?'invite-cancelled':''}"><span>${String(x.date||'').replaceAll('-','/')} ${time}</span><span class="invite-record-actions">${esc(parent?.name||'親機未記録')}・${campaignLabel(x.campaign)} ${x.cancelled?'<span class="invite-cancelled-badge">取り消し済み</span>':`<button type="button" class="invite-cancel-btn" onclick="cancelInvite('${x.id}')">取り消す</button>`}</span></div>`}).join('')}</div></div>`:'<div class="empty">招待記録はありません</div>';
  document.getElementById('deviceInviteDetailOverlay').classList.add('show');
 }
 function renderParentStrength(parentId,mode='month',btn=null){
  const target=document.getElementById('parentStrengthDynamic');if(!target)return;document.querySelectorAll('.parent-strength-tabs button').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');
- const today=dkey(),month=mkey(),year=ykey();let rows=(db.invites||[]).filter(x=>x.parentId===parentId);if(mode==='today')rows=rows.filter(x=>x.date===today);if(mode==='month')rows=rows.filter(x=>String(x.date||'').startsWith(month));if(mode==='year')rows=rows.filter(x=>String(x.date||'').startsWith(year));
+ const today=dkey(),month=mkey(),year=ykey();let rows=activeInvites().filter(x=>x.parentId===parentId);if(mode==='today')rows=rows.filter(x=>x.date===today);if(mode==='month')rows=rows.filter(x=>String(x.date||'').startsWith(month));if(mode==='year')rows=rows.filter(x=>String(x.date||'').startsWith(year));
  const ok=rows.filter(x=>x.campaign===true).length,ng=rows.filter(x=>x.campaign===false).length,rate=rows.length?ok/rows.length*100:0;
- const parents=inviteParents().map(p=>{let a=(db.invites||[]).filter(x=>x.parentId===p.id&&String(x.date||'').startsWith(month));let o=a.filter(x=>x.campaign===true).length;return {id:p.id,rate:a.length?o/a.length*100:-1,total:a.length}}).sort((a,b)=>b.rate-a.rate||b.total-a.total),rank=parents.findIndex(x=>x.id===parentId)+1;
+ const parents=inviteParents().map(p=>{let a=activeInvites().filter(x=>x.parentId===p.id&&String(x.date||'').startsWith(month));let o=a.filter(x=>x.campaign===true).length;return {id:p.id,rate:a.length?o/a.length*100:-1,total:a.length}}).sort((a,b)=>b.rate-a.rate||b.total-a.total),rank=parents.findIndex(x=>x.id===parentId)+1;
  target.innerHTML=`<div class="parent-strength-main"><div class="parent-strength-rate"><small>${mode==='today'?'今日':mode==='month'?'今月':mode==='year'?'今年':'全期間'}の成功率</small><b>${percentText(rate)}</b></div><div class="parent-strength-counts"><span>招待件数 <b>${rows.length}件</b></span><span>成功 <b>${ok}件</b></span><span>対象外 <b>${ng}件</b></span></div></div><div class="parent-strength-rank">🏆 今月の親機ランキング：${rank||'-'}位 / ${parents.length}台中</div>`;
 }
 function renderGenerationHistory(d){
@@ -4188,7 +4206,7 @@ function renderDeviceAnalytics(){
  for(let day=1;day<=lastDay;day++){
   const ds=`${key}-${String(day).padStart(2,'0')}`,de=a.filter(e=>e.date===ds),last=de.slice().sort((x,y)=>(x.timestamp||0)-(y.timestamp||0)).at(-1);
   const inc=sum(de,'increase'),profit=sum(de,'profit'),discarded=sum(de,'discarded'),pending=last?Number(last.pending||0):0;
-  const simless=dev?.sim==='なし'?profit:0,invites=db.invites.filter(x=>x.deviceId===id&&x.date===ds).length,errors=de.filter(isErrorEntry).length;
+  const simless=dev?.sim==='なし'?profit:0,invites=activeInvites().filter(x=>x.deviceId===id&&x.date===ds).length,errors=de.filter(isErrorEntry).length;
   rows.push({day,inc,profit,discarded,pending,simless,invites,errors});
  }
  const totals={inc:rows.reduce((n,r)=>n+r.inc,0),profit:rows.reduce((n,r)=>n+r.profit,0),discarded:rows.reduce((n,r)=>n+r.discarded,0),pending:[...rows].reverse().find(r=>r.pending)?.pending||0,simless:rows.reduce((n,r)=>n+r.simless,0),invites:rows.reduce((n,r)=>n+r.invites,0),errors:rows.reduce((n,r)=>n+r.errors,0)};
@@ -4279,11 +4297,11 @@ function showReportPanels(){
 function pendingAtDate(date){return db.devices.reduce((total,d)=>{const a=db.entries.filter(e=>e.deviceId===d.id&&e.date<=date).sort((x,y)=>(y.timestamp||0)-(x.timestamp||0));return total+Number(a[0]?.pending||0)},0)}
 function monthStats(key){
  const a=db.entries.filter(e=>(e.month||String(e.date||'').slice(0,7))===key),noSim=new Set(db.devices.filter(d=>d.sim==='なし').map(d=>d.id));
- return {entries:a,increase:sum(a,'increase'),profit:sum(a,'profit'),discarded:sum(a,'discarded'),pending:pendingAtDate(key+'-'+String(new Date(Number(key.slice(0,4)),Number(key.slice(5)),0).getDate()).padStart(2,'0')),noSim:sum(a.filter(e=>noSim.has(e.deviceId)),'profit'),invites:db.invites.filter(x=>String(x.date||'').startsWith(key)).length,errors:a.filter(isErrorEntry).length,fee:monthFee(key),target:Number(db.finance?.targets?.[key]||0)}
+ return {entries:a,increase:sum(a,'increase'),profit:sum(a,'profit'),discarded:sum(a,'discarded'),pending:pendingAtDate(key+'-'+String(new Date(Number(key.slice(0,4)),Number(key.slice(5)),0).getDate()).padStart(2,'0')),noSim:sum(a.filter(e=>noSim.has(e.deviceId)),'profit'),invites:activeInvites().filter(x=>String(x.date||'').startsWith(key)).length,errors:a.filter(isErrorEntry).length,fee:monthFee(key),target:Number(db.finance?.targets?.[key]||0)}
 }
 function monthlyDailyRows(key){
  const y=Number(key.slice(0,4)),m=Number(key.slice(5)),last=new Date(y,m,0).getDate(),noSim=new Set(db.devices.filter(d=>d.sim==='なし').map(d=>d.id));let rows=[];
- for(let day=1;day<=last;day++){const date=`${key}-${String(day).padStart(2,'0')}`,a=db.entries.filter(e=>e.date===date);rows.push({date,increase:sum(a,'increase'),profit:sum(a,'profit'),discarded:sum(a,'discarded'),pending:pendingAtDate(date),noSim:sum(a.filter(e=>noSim.has(e.deviceId)),'profit'),invites:db.invites.filter(x=>x.date===date).length,errors:a.filter(isErrorEntry).length})}return rows
+ for(let day=1;day<=last;day++){const date=`${key}-${String(day).padStart(2,'0')}`,a=db.entries.filter(e=>e.date===date);rows.push({date,increase:sum(a,'increase'),profit:sum(a,'profit'),discarded:sum(a,'discarded'),pending:pendingAtDate(date),noSim:sum(a.filter(e=>noSim.has(e.deviceId)),'profit'),invites:activeInvites().filter(x=>x.date===date).length,errors:a.filter(isErrorEntry).length})}return rows
 }
 function renderMonthlyDailyTable(key){const rows=monthlyDailyRows(key),tot={increase:0,profit:0,discarded:0,noSim:0,invites:0,errors:0};rows.forEach(r=>Object.keys(tot).forEach(k=>tot[k]+=r[k]));return `<div class="sectiontitle"><h2>${Number(key.slice(5))}月の日別実績</h2></div><div class="report-table-wrap"><table class="report-table"><thead><tr><th>日付</th><th>増加分</th><th>PayPay実利益</th><th>捨てた分</th><th>未確定分</th><th>SIMなし利益</th><th>招待</th><th>エラー</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${Number(r.date.slice(8))}日</td><td>${yen(r.increase)}</td><td>${yen(r.profit)}</td><td>${yen(r.discarded)}</td><td>${yen(r.pending)}</td><td>${yen(r.noSim)}</td><td>${r.invites}件</td><td>${r.errors}件</td></tr>`).join('')}</tbody><tfoot><tr><td>月合計</td><td>${yen(tot.increase)}</td><td>${yen(tot.profit)}</td><td>${yen(tot.discarded)}</td><td>${yen(rows.at(-1)?.pending||0)}</td><td>${yen(tot.noSim)}</td><td>${tot.invites}件</td><td>${tot.errors}件</td></tr></tfoot></table></div>`}
 function renderYearFinanceTable(year){const rows=[];for(let m=1;m<=12;m++){const key=`${year}-${String(m).padStart(2,'0')}`,s=monthStats(key);rows.push({...s,key,month:m,net:s.profit-s.fee})}const t=rows.reduce((a,r)=>({fee:a.fee+r.fee,target:a.target+r.target,profit:a.profit+r.profit,net:a.net+r.net}),{fee:0,target:0,profit:0,net:0});return `<div class="sectiontitle"><h2>${year}年 収支一覧</h2></div><div class="report-table-wrap"><table class="report-table"><thead><tr><th>月</th><th>通信費</th><th>月目標</th><th>PayPay実利益</th><th>通信費差引後</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.month}月</td><td>${yen(r.fee)}</td><td>${yen(r.target)}</td><td>${yen(r.profit)}</td><td>${yen(r.net)}</td></tr>`).join('')}</tbody><tfoot><tr><td>年間合計</td><td>${yen(t.fee)}</td><td>${yen(t.target)}</td><td>${yen(t.profit)}</td><td>${yen(t.net)}</td></tr></tfoot></table></div>`}

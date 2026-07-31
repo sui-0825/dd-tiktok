@@ -1,4 +1,4 @@
-// Ver24.3 - no offline cache; always update from GitHub Pages
+// Ver25.0 - no offline cache; always update from GitHub Pages
 self.addEventListener('install', event => {
   self.skipWaiting();
 });
