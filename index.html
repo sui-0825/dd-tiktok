@@ -5114,7 +5114,7 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 </style>
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
-<script src="./backend-config.js?v=254"></script>
+<script src="./backend-config.js?v=257"></script>
 <script src="./app-cloud-bridge.js?v=255"></script>
 <script>
 // Ver23.0: GitHub Pagesで更新を確実に反映するため、旧Service Workerとキャッシュを解除します。
@@ -5143,7 +5143,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
 
 <script id="v255-hard-checkin-fix">
 (function(){
-  // Ver25.6: old Ver25.3 recovery overlay must never survive after deployment.
+  // Ver25.7: old Ver25.3 recovery overlay must never survive after deployment.
   const removeOldRecovery=()=>{
     document.getElementById('ddRecoveryPanel')?.remove();
     document.getElementById('v253-recovery-style')?.remove();
@@ -5152,7 +5152,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.6';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.7';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();

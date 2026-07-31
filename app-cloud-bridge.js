@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.4 approval bridge - hotel check-in + safe first cloud seed */
+/* D&D❀TikTok Ver25.7 approval bridge - visible pending requests + RPC admin approval */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -77,21 +77,32 @@ async function pull(){if(state.accessStatus!=='approved')return {ok:false,reason
 async function push(){if(state.recoveryProtected)return {ok:false,reason:'recovery_protected'};if(state.accessStatus!=='approved'||state.applying||!window.db)return {ok:false,reason:'not_ready'};setStatus('クラウドへ保存中…','cloud','','push');const next=Math.max(1,state.revision+1);const rows=await rest('app_snapshots?on_conflict=workspace_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({workspace_id:state.workspaceId,revision:next,payload:{...window.db,currentUser:''},updated_by:state.user?.id||null,updated_at:new Date().toISOString()})});state.revision=Number(Array.isArray(rows)&&rows[0]?.revision||next);await upsertProfileSafe();await pullProfilesSafe();setStatus('同期済み','cloud','','ready');return {ok:true,revision:state.revision}}
 function queuePush(){if(state.recoveryProtected||!state.user||state.accessStatus!=='approved'||state.applying)return;clearTimeout(state.syncTimer);state.syncTimer=setTimeout(()=>push().catch(e=>setStatus('同期エラー','error',e.message,'push-error')),700)}
 function refreshUI(){for(const fn of ['recalculateStoredEntries','ensureLoginMember','updateLoginIdentityUI','renderInputMembers','renderHome'])try{if(typeof window[fn]==='function')window[fn](fn==='recalculateStoredEntries'?window.db:undefined)}catch(e){console.warn(e)}}
-async function listMembers(){if(state.role==='owner')await repairOwnerMembershipSafe();if(!['owner','admin'].includes(state.role))throw new Error('管理者権限が必要です');const members=await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=user_id,role,status,created_at,approved_at&order=created_at.asc`);const profiles=await rest(`profiles?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=user_id,display_name,last_seen_at`);const map=Object.fromEntries((profiles||[]).map(p=>[p.user_id,p]));return (members||[]).map(m=>{const isSelf=m.user_id===state.user?.id;return {...m,role:isSelf&&state.role==='owner'?'owner':m.role,status:isSelf&&state.role==='owner'?'approved':m.status,display_name:map[m.user_id]?.display_name||'名前未登録',last_seen_at:map[m.user_id]?.last_seen_at||null,is_self:isSelf}})}
+async function listMembers(){
+ if(state.role==='owner')await repairOwnerMembershipSafe();
+ if(!['owner','admin'].includes(state.role))throw new Error('管理者権限が必要です');
+ // RLSで他利用者が隠れる環境でも、管理者専用RPCなら承認待ちを取得できる。
+ try{
+  const rows=await rpc('dd_admin_list_members',{target_workspace:state.workspaceId});
+  if(Array.isArray(rows))return rows.map(m=>({...m,is_self:m.user_id===state.user?.id}));
+ }catch(e){console.warn('dd_admin_list_members fallback:',e)}
+ const members=await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=user_id,role,status,created_at,approved_at&order=created_at.asc`);
+ const profiles=await rest(`profiles?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=user_id,display_name,last_seen_at`);
+ const map=Object.fromEntries((profiles||[]).map(p=>[p.user_id,p]));
+ return (members||[]).map(m=>{const isSelf=m.user_id===state.user?.id;return {...m,role:isSelf&&state.role==='owner'?'owner':m.role,status:isSelf&&state.role==='owner'?'approved':m.status,display_name:map[m.user_id]?.display_name||'名前未登録',last_seen_at:map[m.user_id]?.last_seen_at||null,is_self:isSelf}})
+}
 async function updateMember(userId,patch){
  if(!['owner','admin'].includes(state.role))throw new Error('管理者権限が必要です');
  if(!userId)throw new Error('利用者を特定できません');
  if(userId===state.user?.id)throw new Error('自分自身の権限は変更できません');
- const targetRows=await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&user_id=eq.${encodeURIComponent(userId)}&select=role,status&limit=1`);
- const target=Array.isArray(targetRows)?targetRows[0]:null;
- if(!target)throw new Error('利用者が見つかりません');
- if(target.role==='owner')throw new Error('オーナーの権限は変更できません');
- if(Object.prototype.hasOwnProperty.call(patch,'role')&&state.role!=='owner')throw new Error('管理者の任命はオーナーのみ行えます');
- const allowed={};
- if(['approved','pending','suspended','rejected'].includes(patch.status))allowed.status=patch.status;
- if(state.role==='owner'&&['member','admin'].includes(patch.role))allowed.role=patch.role;
- if(!Object.keys(allowed).length)throw new Error('変更内容が正しくありません');
- if(allowed.status==='approved'){allowed.approved_at=new Date().toISOString();allowed.approved_by=state.user.id}
+ const status=['approved','pending','suspended','rejected'].includes(patch?.status)?patch.status:null;
+ const role=state.role==='owner'&&['member','admin'].includes(patch?.role)?patch.role:null;
+ if(!status&&!role)throw new Error('変更内容が正しくありません');
+ try{
+  await rpc('dd_admin_update_member',{target_workspace:state.workspaceId,target_user:userId,new_status:status,new_role:role});
+  return true;
+ }catch(e){console.warn('dd_admin_update_member fallback:',e)}
+ const allowed={};if(status)allowed.status=status;if(role)allowed.role=role;
+ if(status==='approved'){allowed.approved_at=new Date().toISOString();allowed.approved_by=state.user.id}
  await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&user_id=eq.${encodeURIComponent(userId)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(allowed)});return true
 }
 async function init(){if(!configured()){setStatus('設定不足・端末内保存','local','backend-config.jsの設定不足','config');return}try{setStatus('Supabaseへ接続中…','cloud','','connect');await ensureAuth();await verifyWorkspace();const name=getLocalUserName();if(name)await requestAccess(name);else{setStatus('名前を登録してください','cloud','','name-required');emitAccess()}}catch(e){console.error(e);setStatus(`接続失敗: ${String(e.message||'不明').slice(0,80)}`,'error',e.message,state.stage||'error')}}
