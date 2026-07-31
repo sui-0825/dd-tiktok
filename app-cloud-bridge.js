@@ -1,8 +1,10 @@
-/* D&D❀TikTok Ver25.10 new-device check-in diagnostics + fallback registration */
+/* D&D❀TikTok Ver25.12 visible check-in diagnostics */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
 const TOKEN_KEY='dd_supabase_anon_session_v2', LOCAL_USER_KEY='dd_tiktok_local_user_v1', OWNER_UNLOCK_KEY='dd_owner_emergency_unlock_v1', OWNER_FAIL_KEY='dd_owner_pin_fail_v1';
+const diag=[];
+function addDiag(step,detail=''){const row={time:new Date().toISOString(),step:String(step),detail:String(detail||'')};diag.push(row);if(diag.length>30)diag.shift();console.log('[DD DIAG]',row);return row}
 const state={mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true};
 const publicState=()=>({...state,syncTimer:undefined,presenceTimer:undefined,profileTimer:undefined,accessTimer:undefined,accessToken:undefined,user:state.user?{id:state.user.id}:null});
 const emit=()=>window.dispatchEvent(new CustomEvent('dd-cloud-status',{detail:publicState()}));
@@ -17,10 +19,10 @@ async function jsonFetch(url,options={}){const res=await fetch(url,{cache:'no-st
 function saveSession(d){try{localStorage.setItem(TOKEN_KEY,JSON.stringify({access_token:d.access_token,refresh_token:d.refresh_token||'',expires_at:d.expires_at||0,user:d.user}))}catch(_){}}
 function loadStoredSession(){try{const s=JSON.parse(localStorage.getItem(TOKEN_KEY)||'null');if(s?.access_token&&s?.user?.id){state.accessToken=s.access_token;state.user=s.user;return true}}catch(_){}return false}
 function clearSession(){try{localStorage.removeItem(TOKEN_KEY)}catch(_){}state.accessToken='';state.user=null}
-async function ensureAuth(){setStatus('認証を確認中…','cloud','','auth-check');if(loadStoredSession()){try{state.user=await jsonFetch(api('/auth/v1/user'),{headers:authHeaders()});return state.user}catch(_){clearSession()}}setStatus('匿名ログイン中…','cloud','','auth-anonymous');let d;try{d=await jsonFetch(api('/auth/v1/signup'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:JSON.stringify({data:{app:'dd-tiktok'}})})}catch(e){d=await jsonFetch(api('/auth/v1/signup'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:'{}'}).catch(()=>{throw e})}if(!d?.access_token||!d?.user?.id)throw new Error('匿名ログインに失敗しました');state.accessToken=d.access_token;state.user=d.user;saveSession(d);return d.user}
+async function ensureAuth(){addDiag('AUTH_START',loadStoredSession()?'stored-session':'new-anonymous');setStatus('認証を確認中…','cloud','','auth-check');if(loadStoredSession()){try{state.user=await jsonFetch(api('/auth/v1/user'),{headers:authHeaders()});return state.user}catch(_){clearSession()}}setStatus('匿名ログイン中…','cloud','','auth-anonymous');let d;try{d=await jsonFetch(api('/auth/v1/signup'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:JSON.stringify({data:{app:'dd-tiktok'}})})}catch(e){d=await jsonFetch(api('/auth/v1/signup'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:'{}'}).catch(()=>{throw e})}if(!d?.access_token||!d?.user?.id){addDiag('AUTH_FAIL','access_token/user_id missing');throw new Error('匿名ログインに失敗しました')}state.accessToken=d.access_token;state.user=d.user;saveSession(d);addDiag('AUTH_OK',d.user.id);return d.user}
 async function rest(path,options={}){if(!state.accessToken)throw new Error('認証トークンがありません');return jsonFetch(api(`/rest/v1/${path}`),{...options,headers:{...authHeaders(),...(options.headers||{})}})}
 async function rpc(name,payload){return rest(`rpc/${name}`,{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(payload||{})})}
-async function verifyWorkspace(){setStatus('ワークスペース確認中…','cloud','','workspace');let rows=[];if(cfg.workspaceId)rows=await rest(`workspaces?id=eq.${encodeURIComponent(cfg.workspaceId)}&select=id,name&limit=1`);if(!Array.isArray(rows)||!rows[0]?.id)rows=await rest('workspaces?select=id,name&order=created_at.asc&limit=1');if(!Array.isArray(rows)||!rows[0]?.id)throw new Error('ワークスペースがありません');state.workspaceId=rows[0].id;return state.workspaceId}
+async function verifyWorkspace(){addDiag('WORKSPACE_START',cfg.workspaceId||'未設定');setStatus('ワークスペース確認中…','cloud','','workspace');let rows=[];if(cfg.workspaceId)rows=await rest(`workspaces?id=eq.${encodeURIComponent(cfg.workspaceId)}&select=id,name&limit=1`);if(!Array.isArray(rows)||!rows[0]?.id)rows=await rest('workspaces?select=id,name&order=created_at.asc&limit=1');if(!Array.isArray(rows)||!rows[0]?.id)throw new Error('ワークスペースがありません');state.workspaceId=rows[0].id;addDiag('WORKSPACE_OK',state.workspaceId);return state.workspaceId}
 function hasOwnerEmergencyUnlock(){try{return localStorage.getItem(OWNER_UNLOCK_KEY)==='1'}catch(_){return false}}
 function isOwnerRecoveryDevice(){
   // 既存の本番データを持つ「千葉」端末だけをオーナー復旧対象にする。
@@ -90,11 +92,12 @@ async function requestAccess(displayName){
  const name=String(displayName||getLocalUserName()).trim();
  if(!name)throw new Error('名前を入力してください');
  try{localStorage.setItem(LOCAL_USER_KEY,name)}catch(_){}
+ addDiag('REQUEST_START',`name=${name} user=${state.user?.id||''} workspace=${state.workspaceId||''}`);
  setStatus('利用申請を確認中…','cloud','','access');
  let rows=null,rpcError=null;
  try{
-  rows=await rpc('dd_request_access',{target_workspace:state.workspaceId,display_name:name});
- }catch(e){rpcError=e;console.warn('dd_request_access failed; trying own-row fallback:',e)}
+  rows=await rpc('dd_request_access',{target_workspace:state.workspaceId,display_name:name});addDiag('RPC_OK',JSON.stringify(rows));
+ }catch(e){rpcError=e;addDiag('RPC_FAIL',e.message);console.warn('dd_request_access failed; trying own-row fallback:',e)}
  let rawRow=Array.isArray(rows)?rows[0]:rows;
  // 新規端末でRPCが失敗・空応答になった場合、自分自身の申請行だけを直接登録して再確認する。
  if(!rawRow){
@@ -102,14 +105,15 @@ async function requestAccess(displayName){
    await rest('workspace_members?on_conflict=workspace_id,user_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({workspace_id:state.workspaceId,user_id:state.user.id,role:'member',status:'pending',created_at:new Date().toISOString()})});
    try{await rest('profiles?on_conflict=user_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:state.user.id,workspace_id:state.workspaceId,display_name:name,last_seen_at:new Date().toISOString()})})}catch(profileError){console.warn('profile fallback skipped:',profileError)}
    const verify=await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&user_id=eq.${encodeURIComponent(state.user.id)}&select=role,status,created_at&limit=1`);
-   rawRow=Array.isArray(verify)?verify[0]:verify;
+   rawRow=Array.isArray(verify)?verify[0]:verify;addDiag('FALLBACK_VERIFY',JSON.stringify(rawRow||null));
   }catch(fallbackError){
    const a=String(rpcError?.message||'RPC応答なし');
    const b=String(fallbackError?.message||'申請登録失敗');
-   throw new Error(`新規利用申請を登録できませんでした｜RPC: ${a}｜登録: ${b}`);
+   addDiag('FALLBACK_FAIL',`${a} / ${b}`);throw new Error(`新規利用申請を登録できませんでした｜RPC: ${a}｜登録: ${b}`);
   }
  }
  if(!rawRow)throw new Error('利用申請の登録確認ができませんでした');
+ addDiag('MEMBERSHIP_ROW',JSON.stringify(rawRow));
  const row=applyMembership(rawRow);
  if(state.role==='owner')await repairOwnerMembershipSafe();
  if(state.accessStatus==='approved'){
@@ -184,7 +188,7 @@ async function recoverFromCloud(displayName,pin){
  refreshUI();
  return result;
 }
-window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,getPresenceByName,heartbeat,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),role:state.role,accessStatus:state.accessStatus}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,getPresenceByName,heartbeat,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.12',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved')heartbeat().catch(console.warn)});
