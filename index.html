@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="24.4-error-sheet-scroll-fix">
+<meta name="dd-build" content="25.1-all-detail-scroll-fix">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -5043,6 +5043,61 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 .other-menu-card b{font-size:16px}
 .other-menu-card small{font-size:12px;color:var(--muted);line-height:1.45}
 .other-menu-card i{font-style:normal;font-size:25px;color:#9a8250;text-align:right}
+
+
+/* Ver25.1: 全詳細画面・モーダルのスマホ縦スクロール統一 */
+.bulletin-overlay,
+.sheet,
+.annual-edit-sheet,
+.overlay,
+.confirm-overlay,
+.gear-menu-backdrop,
+.invite-ticket-overlay{
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+}
+.bulletin-overlay > .bulletin-sheet,
+.sheet > .sheetpanel,
+.annual-edit-sheet > .annual-edit-panel,
+.overlay > div,
+.confirm-overlay > .confirm-card,
+.gear-menu-backdrop > .gear-menu-sheet,
+.invite-ticket-overlay > .invite-ticket-card{
+  max-height:calc(100dvh - 28px) !important;
+  min-height:0 !important;
+  overflow-y:auto !important;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+}
+/* flex内の詳細本文が高さを押し広げてスクロール不能になるのを防止 */
+.bulletin-sheet > [id$="Body"],
+.bulletin-sheet > [class$="body"],
+.bulletin-full-list,
+#errorReportBody,
+#inviteHubBody,
+#inviteHistoryBody,
+#deviceInviteDetailBody,
+#financeDetailBody,
+#metricDetailBody{
+  min-height:0 !important;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
+}
+@supports not (height:100dvh){
+  .bulletin-overlay > .bulletin-sheet,
+  .sheet > .sheetpanel,
+  .annual-edit-sheet > .annual-edit-panel,
+  .overlay > div,
+  .confirm-overlay > .confirm-card,
+  .gear-menu-backdrop > .gear-menu-sheet,
+  .invite-ticket-overlay > .invite-ticket-card{max-height:calc(100vh - 28px) !important}
+}
 </style>
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 

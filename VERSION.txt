@@ -1,3 +1,3 @@
-Ver25.0 invite history cancellation
-Base: Ver24.5 large-backup restore fix
-Change: soft-cancel invite records, exclude cancelled records from all counts
+Ver25.1 all-detail scroll fix
+Base: Ver25.0 invite history cancellation
+Change: unified vertical scrolling for every detail sheet, overlay and dialog on mobile
