@@ -1,1 +1,7 @@
-D&D TikTok Ver25.43 - apply remote payload after dirty-state reconciliation; remote wins equal timestamp ties.
+D&D❀TikTok Ver25.47
+
+同期モジュールだけを修正した安全版です。
+- index.html（画面・計算・入力処理）はVer25.44のまま変更なし
+- app-cloud-bridge.jsのみ変更
+- 既存入力を修正した際、更新時刻が同じでも内容が違えば未送信変更として保護
+- クラウド統合時、時刻が同じなら操作中の端末側変更を採用
