@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.45-entry-edit-sync-fix">
+<meta name="dd-build" content="25.32-shared-save-foundation">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -4195,7 +4195,7 @@ function saveAnnualEditor(){
  if(!v){document.getElementById('annualEditError').textContent='入力値を入れてください';document.getElementById('annualEditError').classList.add('show');return}
  try{
   parseInput(v);const raw=normalizeRaw(v);
-  if(entry){entry.raw=raw;entry.inputRaw=raw;entry.editedAt=Date.now()}else{const timestamp=new Date(date+'T12:00:00').getTime()+db.entries.filter(e=>e.deviceId===deviceId&&e.date===date).length;db.entries.push({id:uid(),deviceId,date,month:date.slice(0,7),year:date.slice(0,4),raw,inputRaw:raw,timestamp,editedAt:Date.now(),memo:'',operator:currentInputOperator||'メイン'})}
+  if(entry){entry.raw=raw;entry.inputRaw=raw}else{const timestamp=new Date(date+'T12:00:00').getTime()+db.entries.filter(e=>e.deviceId===deviceId&&e.date===date).length;db.entries.push({id:uid(),deviceId,date,month:date.slice(0,7),year:date.slice(0,4),raw,inputRaw:raw,timestamp,memo:''})}
   annualLastSavedCell=`${date}|${deviceId}`;recalcDevice(deviceId);persist();closeAnnualEditor();renderAnnual();renderHome();toast(entry?'修正日以降、この端末だけ再計算しました':'年間データへ直接登録しました');
  }catch(e){const err=document.getElementById('annualEditError');err.textContent=e.message||'入力形式を確認してください';err.classList.add('show')}
 }
@@ -4473,7 +4473,7 @@ function renderHistory(){
 }
 function editEntry(id){
  const e=db.entries.find(x=>x.id===id);if(!e)return;const v=prompt('入力値を修正してください',e.raw);if(v===null)return;
- try{parseInput(v);e.raw=normalizeRaw(v);e.inputRaw=e.raw;e.editedAt=Date.now();recalcDevice(e.deviceId);persist();toast('この端末の後続データを再計算し、共有保存を開始しました');renderReport();renderHome()}catch(err){toast(err.message)}
+ try{parseInput(v);e.raw=normalizeRaw(v);recalcDevice(e.deviceId);toast('この端末の後続データを再計算しました');renderReport();renderHome()}catch(err){toast(err.message)}
 }
 
 const BACKUP_SCHEMA_VERSION=23;
@@ -5422,7 +5422,7 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
 <script src="./backend-config.js?v=2515"></script>
-<script src="./app-cloud-bridge.js?v=2545"></script>
+<script src="./app-cloud-bridge.js?v=2542"></script>
 <script>
 // Ver23.0: GitHub Pagesで更新を確実に反映するため、旧Service Workerとキャッシュを解除します。
 if ('serviceWorker' in navigator) {
@@ -5441,7 +5441,7 @@ if ('serviceWorker' in navigator) {
 
 
 <script id="v141-cloud-ui">
-let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=document.getElementById('cloudStatusPill');if(!el)return;const d=e.detail||{};clearTimeout(ddCloudHideTimer);el.classList.remove('dd-cloud-hide');el.textContent=d.status||'端末内保存';el.dataset.mode=d.mode||'local';el.title=d.error||'';el.onclick=async()=>{el.textContent='接続先を確認中…';try{const x=await window.DDCloud?.inspectConnection?.();const t=await window.DDCloud?.inspectTrackedEntry?.('Air2','2026-08-01');const fmt=(z)=>{const e=z?.entry;return '件数: '+(z?.count??0)+'\n記録: '+(e?('raw='+e.raw+' / input='+e.inputValue+' / 増加='+e.increase+' / PayPay='+e.profit+' / 未確定='+e.pending+' / operator='+e.operator):'見つかりません')+'\n8/1集計: 増加='+Number(z?.totals?.increase||0)+' / PayPay='+Number(z?.totals?.profit||0)+' / 未確定='+Number(z?.totals?.pending||0)+' / 件数='+Number(z?.totals?.count||0)};alert('Air2・8月1日・431 追跡診断 Ver25.45\n\n【Android/iPhone端末内】\n'+fmt(t?.local)+'\n\n【クラウド本文】\n'+fmt(t?.remote)+'\n\n端末Revision: '+t.localRevision+' / クラウドRevision: '+t.remoteRevision+'\nクラウド更新: '+(t.remoteUpdatedAt||'-')+'\n\n--- 接続情報 ---\n接続先: '+(x.endpoint||'-')+'\n設定Workspace: '+(x.configuredWorkspaceId||'-')+'\n実際Workspace: '+(x.activeWorkspaceId||'-')+'\n\n端末Revision: '+x.localRevision+'\nクラウドRevision: '+x.remoteRevision+'\nクラウド更新: '+(x.remoteUpdatedAt||'-')+'\n\n端末台数: '+x.localDevices+' / クラウド: '+x.remoteDevices+'\n端末履歴: '+x.localEntries+' / クラウド: '+x.remoteEntries+'\n未送信: '+(x.dirty?'あり':'なし')+'\n利用者ID: '+(x.userId||'-')+'\n権限: '+(x.role||'-')+' / '+(x.accessStatus||'-')+'\n状態: '+(x.status||'-')+'\nエラー: '+(x.error||'なし'));}catch(err){const x=window.DDCloud?.getDiagnostics?.()||d;alert('接続先診断に失敗しました\n'+String(err?.message||err)+'\n\nWorkspace: '+(x.workspaceId||'-')+'\nRevision: '+(x.revision||0));}};if((d.mode||'')==='cloud'){ddCloudHideTimer=setTimeout(()=>el.classList.add('dd-cloud-hide'),2200);}});
+let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=document.getElementById('cloudStatusPill');if(!el)return;const d=e.detail||{};clearTimeout(ddCloudHideTimer);el.classList.remove('dd-cloud-hide');el.textContent=d.status||'端末内保存';el.dataset.mode=d.mode||'local';el.title=d.error||'';el.onclick=async()=>{el.textContent='接続先を確認中…';try{const x=await window.DDCloud?.inspectConnection?.();const t=await window.DDCloud?.inspectTrackedEntry?.('Air2','2026-08-01');const fmt=(z)=>{const e=z?.entry;return '件数: '+(z?.count??0)+'\n記録: '+(e?('raw='+e.raw+' / input='+e.inputValue+' / 増加='+e.increase+' / PayPay='+e.profit+' / 未確定='+e.pending+' / operator='+e.operator):'見つかりません')+'\n8/1集計: 増加='+Number(z?.totals?.increase||0)+' / PayPay='+Number(z?.totals?.profit||0)+' / 未確定='+Number(z?.totals?.pending||0)+' / 件数='+Number(z?.totals?.count||0)};alert('Air2・8月1日・431 追跡診断 Ver25.44\n\n【Android/iPhone端末内】\n'+fmt(t?.local)+'\n\n【クラウド本文】\n'+fmt(t?.remote)+'\n\n端末Revision: '+t.localRevision+' / クラウドRevision: '+t.remoteRevision+'\nクラウド更新: '+(t.remoteUpdatedAt||'-')+'\n\n--- 接続情報 ---\n接続先: '+(x.endpoint||'-')+'\n設定Workspace: '+(x.configuredWorkspaceId||'-')+'\n実際Workspace: '+(x.activeWorkspaceId||'-')+'\n\n端末Revision: '+x.localRevision+'\nクラウドRevision: '+x.remoteRevision+'\nクラウド更新: '+(x.remoteUpdatedAt||'-')+'\n\n端末台数: '+x.localDevices+' / クラウド: '+x.remoteDevices+'\n端末履歴: '+x.localEntries+' / クラウド: '+x.remoteEntries+'\n未送信: '+(x.dirty?'あり':'なし')+'\n利用者ID: '+(x.userId||'-')+'\n権限: '+(x.role||'-')+' / '+(x.accessStatus||'-')+'\n状態: '+(x.status||'-')+'\nエラー: '+(x.error||'なし'));}catch(err){const x=window.DDCloud?.getDiagnostics?.()||d;alert('接続先診断に失敗しました\n'+String(err?.message||err)+'\n\nWorkspace: '+(x.workspaceId||'-')+'\nRevision: '+(x.revision||0));}};if((d.mode||'')==='cloud'){ddCloudHideTimer=setTimeout(()=>el.classList.add('dd-cloud-hide'),2200);}});
 </script>
 
 <!-- Ver25.4: 共同編集者はクラウド復元画面ではなく、通常のホテルチェックイン承認フローへ進みます。 -->
@@ -5459,7 +5459,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.45';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.44';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
