@@ -4459,7 +4459,7 @@ function buildBackupPayload(){
  return {
   format:'D&D_TIKTOK_BACKUP',
   schemaVersion:BACKUP_SCHEMA_VERSION,
-  appBuild:'25.30',
+  appBuild:'25.31',
   exportedAt:new Date().toISOString(),
   data:JSON.parse(JSON.stringify(db))
  };
@@ -4530,7 +4530,16 @@ function mergePartialBackup(restored,start,end){
   if(db.entries.some(x=>x.id===copy.id))copy.id=uid();
   db.entries.push(copy);
  }
- for(const id of targetCurrentIds){initDeviceGenerations(db.devices.find(d=>d.id===id));recalcDevice(id)}
+ for(const id of targetCurrentIds){
+  const device=db.devices.find(d=>d.id===id);
+  if(!device)continue;
+  initDeviceGenerations(device);
+  const currentGen=currentGeneration(device);
+  for(const entry of db.entries){
+   if(entry.deviceId===id&&!entry.generationId)entry.generationId=currentGen.id;
+  }
+ }
+ recalculateStoredEntries(db);
  db.version=101;
  return{devices:imported.length,entries:importedEntries.length};
 }
@@ -4564,10 +4573,22 @@ function restoreBackup(ev){
    markAllScreensDirty();
    renderHome();renderSecuritySettings();renderAdminPage();
    refreshActiveScreen(true);
-   try{if(window.DDCloud?.state?.accessStatus==='approved')await window.DDCloud.push();else window.DDCloud?.queuePush?.()}catch(err){console.warn('復元後クラウド保存:',err)}
+   try{
+    if(window.DDCloud?.state?.accessStatus==='approved'){
+     const pushed=await window.DDCloud.push();
+     if(!pushed?.ok)throw new Error('クラウド保存が完了しませんでした');
+    }else window.DDCloud?.queuePush?.();
+   }catch(err){
+    console.warn('復元後クラウド保存:',err);
+    markAllScreensDirty();
+    refreshActiveScreen(true);
+    toast(message+'（端末内には保存済み）');
+    return;
+   }
    markAllScreensDirty();
    refreshActiveScreen(true);
    toast(message);
+   if(restoreMode==='partial')setTimeout(()=>location.reload(),700);
   }catch(e){db=previousDb;console.error('復元エラー:',e);toast(e?.message||'バックアップを復元できませんでした')}
   finally{input.value=''}
  };
@@ -5380,7 +5401,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.30';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.31';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
