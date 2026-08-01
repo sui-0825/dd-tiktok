@@ -1,1 +1,1 @@
-D&D TikTok Ver25.38 connection target diagnostic build. Tap the cloud status pill to compare endpoint, workspace, local/remote revision, counts, pending state, user and access status.
+D&D TikTok Ver25.40 - Android stale dirty queue repair. Clears only stale dirty flags; preserves actual local-only/newer records.

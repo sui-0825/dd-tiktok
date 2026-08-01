@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.39 Android dirty-state reconciliation */
+/* D&D❀TikTok Ver25.40 stale dirty-queue repair */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -46,29 +46,32 @@ function stableComparable(value){
  return value;
 }
 function recordSignature(row){try{return JSON.stringify(stableComparable(row))}catch(_){return ''}}
-function hasActualUnsyncedChanges(remote={},local={}){
+function inspectActualUnsyncedChanges(remote={},local={}){
+ const details=[];
  const groups=['devices','entries','invites','bulletins'];
  for(const key of groups){
   const rmap=new Map((Array.isArray(remote[key])?remote[key]:[]).filter(Boolean).map(x=>[String(x.id||''),x]));
   for(const row of (Array.isArray(local[key])?local[key]:[])){
    const id=String(row?.id||'');
-   if(!id||!rmap.has(id))return true;
+   if(!id){details.push(`${key}:idなし`);continue}
+   if(!rmap.has(id)){details.push(`${key}:クラウド未登録 ${id}`);continue}
    const rr=rmap.get(id);
-   if(recordSignature(row)!==recordSignature(rr)&&recordClock(row)>=recordClock(rr))return true;
+   const lc=recordClock(row),rc=recordClock(rr);
+   // 同じIDの差分は、端末側の更新時刻が明確に新しい場合だけ未送信と判定する。
+   // 再計算や表示用フィールドの差だけで、永久にdirty扱いになるのを防ぐ。
+   if(lc>rc&&recordSignature(row)!==recordSignature(rr))details.push(`${key}:端末側が新しい ${id}`);
   }
  }
- for(const key of ['finance','security','settings']){
-  if(recordSignature(local?.[key]||{})!==recordSignature(remote?.[key]||{}))return true;
- }
- return false;
+ return {unsynced:details.length>0,details};
 }
+function hasActualUnsyncedChanges(remote={},local={}){return inspectActualUnsyncedChanges(remote,local).unsynced}
 async function reconcileDirtyStateWithRemote(){
  if(!state.dirty||!state.workspaceId||state.accessStatus!=='approved')return {cleared:false};
  const rows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,payload,updated_at&limit=1`,{timeoutMs:45000});
  const row=Array.isArray(rows)?rows[0]:null;
  if(!row?.payload||typeof row.payload!=='object')return {cleared:false};
- const unsynced=hasActualUnsyncedChanges(row.payload,window.db||{});
- if(unsynced)return {cleared:false,unsynced:true,revision:Number(row.revision||0)};
+ const check=inspectActualUnsyncedChanges(row.payload,window.db||{});
+ if(check.unsynced){addDiag('DIRTY_REAL_QUEUE',check.details.slice(0,8).join(' / '));return {cleared:false,unsynced:true,details:check.details,revision:Number(row.revision||0)}};
  state.dirty=false;state.dirtySeq=0;state.revision=Number(row.revision||0);
  try{localStorage.removeItem(DIRTY_KEY);localStorage.removeItem(DIRTY_SEQ_KEY)}catch(_){}
  addDiag('DIRTY_REPAIRED',`revision=${state.revision}`);
@@ -532,7 +535,7 @@ async function inspectConnection(){
  const payload=row?.payload&&typeof row.payload==='object'?row.payload:{};
  const local=window.db&&typeof window.db==='object'?window.db:{};
  return {
-  version:'25.39',
+  version:'25.40',
   endpoint:new URL(base).host,
   configuredWorkspaceId:String(cfg.workspaceId||''),
   activeWorkspaceId:String(state.workspaceId||''),
