@@ -2962,17 +2962,23 @@ function compactDBForStorage(source){
 function persist(){
  markAllScreensDirty();
  const payload=JSON.stringify(compactDBForStorage(db));
+ // Ver25.34: cloud delivery must never be blocked by an iPhone localStorage quota error.
+ // Mark the change for cloud delivery first, then attempt the local safety copy.
+ queueMicrotask(()=>window.DDCloud?.queuePush?.());
  try{
   localStorage.setItem(KEY,payload);
   localStorage.setItem('dd_last_local_save_v25',String(Date.now()));
-  // Ver25.33: every normal save must enter the cloud queue.
-  // Local storage remains the immediate safety copy; cloud delivery continues asynchronously.
-  queueMicrotask(()=>window.DDCloud?.queuePush?.());
   return true;
  }catch(e){
-  console.error('端末保存に失敗:',e);
-  toast('端末保存に失敗しました。入力は消さずに残しています');
-  throw e;
+  console.warn('端末保存容量超過。クラウド保存を優先します:',e);
+  try{
+   // Remove only the oversized app snapshot. Login/device binding settings remain untouched.
+   localStorage.removeItem(KEY);
+   localStorage.setItem('dd_last_local_quota_v25',String(Date.now()));
+  }catch(_){ }
+  toast('端末容量が上限です。入力はクラウドへ保存しています');
+  // Do not throw: throwing here previously stopped the cloud save and made iPhone input impossible.
+  return true;
  }
 }
 window.compactDBForStorage=compactDBForStorage;
@@ -5367,7 +5373,7 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
 <script src="./backend-config.js?v=2515"></script>
-<script src="./app-cloud-bridge.js?v=2533"></script>
+<script src="./app-cloud-bridge.js?v=2534"></script>
 <script>
 // Ver23.0: GitHub Pagesで更新を確実に反映するため、旧Service Workerとキャッシュを解除します。
 if ('serviceWorker' in navigator) {
@@ -5404,7 +5410,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.33';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.34';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
