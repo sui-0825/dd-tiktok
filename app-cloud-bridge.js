@@ -586,6 +586,32 @@ async function restoreCurrentOwnerByPin(ownerPin){
   await pullProfilesSafe();refreshUI();return row;
 }
 
+
+async function inspectTrackedEntry(deviceName='Air2',date='2026-08-01'){
+ if(!state.user)await ensureAuth();
+ if(!state.workspaceId)await verifyWorkspace();
+ const rows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,updated_at,payload&limit=1`,{timeoutMs:45000});
+ const row=Array.isArray(rows)?rows[0]:null;
+ const remote=row?.payload&&typeof row.payload==='object'?row.payload:{};
+ const local=window.db&&typeof window.db==='object'?window.db:{};
+ const inspect=(db)=>{
+  const devices=Array.isArray(db.devices)?db.devices:[];
+  const entries=Array.isArray(db.entries)?db.entries:[];
+  const dev=devices.find(d=>String(d?.name||'').trim()===deviceName);
+  const matches=dev?entries.filter(e=>String(e?.deviceId||'')===String(dev.id||'')&&String(e?.date||'')===date):[];
+  matches.sort((a,b)=>Number(a?.timestamp||0)-Number(b?.timestamp||0));
+  const e=matches[matches.length-1]||null;
+  const day=entries.filter(x=>String(x?.date||'')===date);
+  const sum=k=>day.reduce((n,x)=>n+(Number(x?.[k])||0),0);
+  return {
+   deviceId:String(dev?.id||''),count:matches.length,
+   entry:e?{id:String(e.id||''),raw:String(e.raw??e.inputRaw??''),inputValue:Number(e.inputValue||0),operation:String(e.operation||''),increase:Number(e.increase||0),profit:Number(e.profit||0),pending:Number(e.pending||0),discarded:Number(e.discarded||0),timestamp:Number(e.timestamp||0),operator:String(e.operator||'')}:null,
+   totals:{increase:sum('increase'),profit:sum('profit'),pending:sum('pending'),discarded:sum('discarded'),count:day.length}
+  };
+ };
+ return {deviceName,date,localRevision:Number(state.revision||0),remoteRevision:Number(row?.revision||0),remoteUpdatedAt:String(row?.updated_at||''),local:inspect(local),remote:inspect(remote)};
+}
+
 async function inspectConnection(){
  if(!state.user)await ensureAuth();
  if(!state.workspaceId)await verifyWorkspace();
@@ -614,7 +640,7 @@ async function inspectConnection(){
   error:String(state.lastError||'')
  };
 }
-window.DDCloud={state,isConfigured:configured,init,pull,push,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.43',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,pull,push,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.44',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
