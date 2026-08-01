@@ -3574,7 +3574,7 @@ function performEntrySave({deviceId,p,date,memo,operator='メイン',replaceEntr
    recalculateDevice(deviceId);
   }
   persist();clearEntryDraft();
-  // Ver25.36: do not claim shared save until the cloud confirms it.
+  // Ver25.37: do not claim shared save until the cloud confirms it.
   toast(replaceEntryId?'端末へ変更内容を保存しました。共有保存を確認中…':'端末へ保存しました。共有保存を確認中…');
   setTimeout(async()=>{
    try{
@@ -5422,7 +5422,7 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
 <script src="./backend-config.js?v=2515"></script>
-<script src="./app-cloud-bridge.js?v=2536"></script>
+<script src="./app-cloud-bridge.js?v=2537"></script>
 <script>
 // Ver23.0: GitHub Pagesで更新を確実に反映するため、旧Service Workerとキャッシュを解除します。
 if ('serviceWorker' in navigator) {
@@ -5459,7 +5459,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.36';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.37';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();

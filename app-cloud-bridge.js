@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.36 company parent data seeding */
+/* D&D❀TikTok Ver25.37 cloud write diagnostics */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -56,7 +56,22 @@ function mergeSnapshots(remote={},local={}){
  out.currentUser=String(local.currentUser||'');
  return out;
 }
-async function jsonFetch(url,options={}){const res=await fetch(url,{cache:'no-store',...options});const text=await res.text();let body=null;try{body=text?JSON.parse(text):null}catch(_){body=text}if(!res.ok){const msg=(body&&typeof body==='object'&&(body.message||body.msg||body.error_description||body.error||body.hint||body.details))||text||`HTTP ${res.status}`;throw new Error(`${res.status}: ${msg}`)}return body}
+async function jsonFetch(url,options={}){
+ const controller=new AbortController();
+ const timeoutMs=Number(options.timeoutMs||45000);
+ const timer=setTimeout(()=>controller.abort(new DOMException('通信が45秒を超えました','AbortError')),timeoutMs);
+ try{
+  const clean={...options};delete clean.timeoutMs;
+  const res=await fetch(url,{cache:'no-store',...clean,signal:controller.signal});
+  const text=await res.text();let body=null;
+  try{body=text?JSON.parse(text):null}catch(_){body=text}
+  if(!res.ok){const msg=(body&&typeof body==='object'&&(body.message||body.msg||body.error_description||body.error||body.hint||body.details))||text||`HTTP ${res.status}`;throw new Error(`${res.status}: ${msg}`)}
+  return body;
+ }catch(e){
+  if(e?.name==='AbortError')throw new Error('通信タイムアウト（45秒）');
+  throw e;
+ }finally{clearTimeout(timer)}
+}
 function saveSession(d){try{localStorage.setItem(TOKEN_KEY,JSON.stringify({access_token:d.access_token,refresh_token:d.refresh_token||'',expires_at:d.expires_at||0,user:d.user}))}catch(_){}}
 function loadStoredSession(){try{const s=JSON.parse(localStorage.getItem(TOKEN_KEY)||'null');if(s?.access_token&&s?.user?.id){state.accessToken=s.access_token;state.user=s.user;return true}}catch(_){}return false}
 function clearSession(){try{localStorage.removeItem(TOKEN_KEY)}catch(_){}state.accessToken='';state.user=null}
@@ -273,17 +288,23 @@ window.addEventListener('focus',()=>{if(document.visibilityState==='visible')hea
 window.addEventListener('pageshow',()=>{if(document.visibilityState==='visible')startPresence()});
 async function pull(){if(state.accessStatus!=='approved')return {ok:false,reason:'not_approved'};if(state.dirty&&window.db&&hasMeaningfulLocalData()){setStatus('未送信データを端末で保護中','cloud','','local-dirty');scheduleRetry();return {ok:true,found:true,skipped:true,reason:'local_dirty'}}setStatus('クラウドデータ確認中…','cloud','','pull');const rows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,payload,updated_at&limit=1`);const d=Array.isArray(rows)?rows[0]:null;if(d?.payload&&typeof d.payload==='object'&&Object.keys(d.payload).length){const local=getLocalUserName(),members=Array.isArray(window.db?.members)?window.db.members.slice():[];state.applying=true;window.db=d.payload;if(typeof window.recalculateStoredEntries==='function')window.recalculateStoredEntries(window.db);mergeSharedMembers(members);if(local)window.db.currentUser=local;await pullProfilesSafe();try{const saved=typeof window.compactDBForStorage==='function'?window.compactDBForStorage(window.db):window.db;localStorage.setItem(window.KEY||'dd_tiktok_app_v14_production',JSON.stringify(saved))}catch(_){}state.revision=Number(d.revision||0);state.recoveryProtected=false;state.applying=false;setStatus('復元・同期済み','cloud','','ready');return {ok:true,found:true,payload:window.db,revision:state.revision}}setStatus('クラウドは空です','cloud','','empty');return {ok:true,found:false}}
 async function push(){
- if(state.recoveryProtected)return {ok:false,reason:'recovery_protected'};
- if(state.accessStatus!=='approved'||state.applying||!window.db)return {ok:false,reason:'not_ready'};
- if(navigator.onLine===false){markDirty();setStatus('オフライン・端末に保存済み','local','','offline');scheduleRetry();return {ok:false,reason:'offline'}}
+ addDiag('1/6 PUSH_START',`dirty=${state.dirty} access=${state.accessStatus} role=${state.role}`);
+ if(state.recoveryProtected){addDiag('STOP','recovery_protected');return {ok:false,reason:'recovery_protected'}}
+ if(state.accessStatus!=='approved'||state.applying||!window.db){addDiag('STOP',`not_ready access=${state.accessStatus} applying=${state.applying}`);return {ok:false,reason:'not_ready'}}
+ if(navigator.onLine===false){markDirty();setStatus('診断 1/6：オフライン','local','','diag-offline');scheduleRetry();return {ok:false,reason:'offline'}}
  const seq=state.dirtySeq||Date.now();state.pushingSeq=seq;
  let snapshot=typeof structuredClone==='function'?structuredClone(window.db):JSON.parse(JSON.stringify(window.db));
- setStatus('クラウドへ保存中…','cloud','','push');
+ setStatus('診断 1/6：送信準備中','cloud','','diag-prepare');
  try{
-  // Ver25.32: pull the latest snapshot immediately before writing and merge by record id.
-  // This protects additions made on another phone from being erased by a whole-app overwrite.
-  const latestRows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,payload&limit=1`);
+  const localJson=JSON.stringify({...snapshot,currentUser:''});
+  const localBytes=new Blob([localJson]).size;
+  addDiag('1/6 PAYLOAD_READY',`${localBytes} bytes / devices=${snapshot.devices?.length||0} entries=${snapshot.entries?.length||0}`);
+  setStatus(`診断 2/6：親データ確認中（${(localBytes/1024/1024).toFixed(1)}MB）`,'cloud','','diag-read-latest');
+  addDiag('2/6 READ_REMOTE_START',state.workspaceId);
+  const latestRows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,payload&limit=1`,{timeoutMs:45000});
+  addDiag('2/6 READ_REMOTE_OK',`rows=${Array.isArray(latestRows)?latestRows.length:0}`);
   const latest=Array.isArray(latestRows)?latestRows[0]:null;
+  setStatus('診断 3/6：変更を統合中','cloud','','diag-merge');
   if(latest?.payload&&typeof latest.payload==='object'){
    snapshot=mergeSnapshots(latest.payload,snapshot);
    state.revision=Math.max(state.revision,Number(latest.revision||0));
@@ -291,14 +312,28 @@ async function push(){
    try{const saved=typeof window.compactDBForStorage==='function'?window.compactDBForStorage(window.db):window.db;localStorage.setItem(window.KEY||'dd_tiktok_app_v14_production',JSON.stringify(saved))}catch(_){}
   }
   const next=Math.max(1,state.revision+1);
-  const rows=await rest('app_snapshots?on_conflict=workspace_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({workspace_id:state.workspaceId,revision:next,payload:{...snapshot,currentUser:''},updated_by:state.user?.id||null,updated_at:new Date().toISOString()})});
+  const body=JSON.stringify({workspace_id:state.workspaceId,revision:next,payload:{...snapshot,currentUser:''},updated_by:state.user?.id||null,updated_at:new Date().toISOString()});
+  const bytes=new Blob([body]).size;
+  addDiag('3/6 MERGE_OK',`revision=${state.revision}->${next} body=${bytes} bytes`);
+  setStatus(`診断 4/6：クラウドへ送信中（${(bytes/1024/1024).toFixed(1)}MB）`,'cloud','','diag-upload');
+  addDiag('4/6 UPLOAD_START',`${bytes} bytes`);
+  const rows=await rest('app_snapshots?on_conflict=workspace_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body,timeoutMs:45000});
+  addDiag('4/6 UPLOAD_OK',`rows=${Array.isArray(rows)?rows.length:0}`);
   state.revision=Number(Array.isArray(rows)&&rows[0]?.revision||next);
+  setStatus('診断 5/6：利用者情報を更新中','cloud','','diag-profile');
   clearDirty(seq);
-  await upsertProfileSafe();await pullProfilesSafe();
-  setStatus(state.dirty?'追加変更を保存待ち':'同期済み','cloud','',state.dirty?'push-pending':'ready');
+  await upsertProfileSafe();
+  addDiag('5/6 PROFILE_OK','upsert');
+  await pullProfilesSafe();
+  addDiag('5/6 PROFILES_OK','pull');
+  setStatus('診断 6/6：共有保存完了','cloud','','diag-complete');
+  addDiag('6/6 COMPLETE',`revision=${state.revision}`);
   if(state.dirty)queuePush(false);
-  return {ok:true,revision:state.revision};
- }catch(e){markDirty();setStatus('通信エラー・入力は端末に保存済み','error',e.message,'push-error');scheduleRetry();throw e}
+  return {ok:true,revision:state.revision,bytes};
+ }catch(e){
+  addDiag('DIAG_ERROR',`${state.stage}: ${e?.message||e}`);
+  markDirty();setStatus(`停止位置：${state.status}`,'error',e.message,'diag-error');scheduleRetry();throw e
+ }
 }
 async function seedCompanyData(payload){
  if(!payload||typeof payload!=='object'||!Array.isArray(payload.devices)||!Array.isArray(payload.entries))throw new Error('親データの形式が正しくありません');
@@ -447,7 +482,7 @@ async function restoreCurrentOwnerByPin(ownerPin){
   await pullProfilesSafe();refreshUI();return row;
 }
 
-window.DDCloud={state,isConfigured:configured,init,pull,push,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.36',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,pull,push,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.37',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
