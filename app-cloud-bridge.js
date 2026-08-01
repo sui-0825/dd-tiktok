@@ -1,11 +1,11 @@
-/* D&D❀TikTok Ver25.32 shared-save foundation */
+/* D&D❀TikTok Ver25.33 automatic receive foundation */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
 const TOKEN_KEY='dd_supabase_anon_session_v2', LOCAL_USER_KEY='dd_tiktok_local_user_v1', DEVICE_ID_KEY='dd_device_registration_id_v1', DEVICE_ACCOUNT_KEY='dd_device_bound_user_v1', OWNER_UNLOCK_KEY='dd_owner_emergency_unlock_v1', OWNER_FAIL_KEY='dd_owner_pin_fail_v1', DIRTY_KEY='dd_cloud_dirty_v25', DIRTY_SEQ_KEY='dd_cloud_dirty_seq_v25';
 const diag=[];
 function addDiag(step,detail=''){const row={time:new Date().toISOString(),step:String(step),detail:String(detail||'')};diag.push(row);if(diag.length>30)diag.shift();console.log('[DD DIAG]',row);return row}
-const state={mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,retryTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true,dirty:false,dirtySeq:0,pushingSeq:0};
+const state={mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,retryTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,receiveTimer:null,receiveBusy:false,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true,dirty:false,dirtySeq:0,pushingSeq:0};
 const publicState=()=>({...state,syncTimer:undefined,retryTimer:undefined,presenceTimer:undefined,profileTimer:undefined,accessTimer:undefined,accessToken:undefined,user:state.user?{id:state.user.id}:null});
 
 function loadDirtyState(){try{state.dirty=localStorage.getItem(DIRTY_KEY)==='1';state.dirtySeq=Number(localStorage.getItem(DIRTY_SEQ_KEY)||0)}catch(_){state.dirty=false;state.dirtySeq=0}}
@@ -158,7 +158,7 @@ function startAccessPolling(){
     stopAccessPolling();
     setStatus('チェックイン承認済み','cloud','','approved');
     await pull();
-    startPresence();refreshUI();
+    startPresence();startAutomaticReceive();refreshUI();
    }else if(state.accessStatus!==before){emitAccess()}
   }catch(e){console.warn('access polling:',e)}
  },4000);
@@ -212,7 +212,7 @@ async function requestAccess(displayName){
    const seeded=await push();
    if(!seeded?.ok)throw new Error('初回クラウド保存に失敗しました');
   }
-  startPresence();refreshUI();
+  startPresence();startAutomaticReceive();refreshUI();
  }else{
   setStatus(state.accessStatus==='pending'?'管理者の承認待ちです':state.accessStatus==='suspended'?'利用停止中です':'利用できません','cloud','',state.accessStatus);
   emitAccess();
@@ -301,6 +301,34 @@ async function push(){
  }catch(e){markDirty();setStatus('通信エラー・入力は端末に保存済み','error',e.message,'push-error');scheduleRetry();throw e}
 }
 function queuePush(mark=true){if(mark)markDirty();if(state.recoveryProtected||!state.user||state.accessStatus!=='approved'||state.applying)return;clearTimeout(state.syncTimer);state.syncTimer=setTimeout(()=>push().catch(()=>scheduleRetry()),700)}
+
+async function checkForRemoteUpdates(reason='timer'){
+ if(state.receiveBusy||state.applying||state.accessStatus!=='approved'||!state.workspaceId||document.visibilityState==='hidden')return {ok:false,reason:'not_ready'};
+ if(state.dirty){scheduleRetry();return {ok:false,reason:'local_dirty'};}
+ state.receiveBusy=true;
+ try{
+  const rows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,updated_at&limit=1`);
+  const row=Array.isArray(rows)?rows[0]:null;
+  const remoteRevision=Number(row?.revision||0);
+  if(remoteRevision>Number(state.revision||0)){
+   addDiag('REMOTE_UPDATE',`${reason}: ${state.revision}->${remoteRevision}`);
+   const result=await pull();
+   if(result?.found)refreshUI();
+   return {ok:true,updated:Boolean(result?.found),revision:state.revision};
+  }
+  return {ok:true,updated:false,revision:state.revision};
+ }catch(e){
+  console.warn('automatic receive:',e);
+  return {ok:false,error:e.message};
+ }finally{state.receiveBusy=false;}
+}
+function startAutomaticReceive(){
+ clearInterval(state.receiveTimer);
+ if(state.accessStatus!=='approved')return;
+ state.receiveTimer=setInterval(()=>checkForRemoteUpdates('interval'),5000);
+}
+function stopAutomaticReceive(){clearInterval(state.receiveTimer);state.receiveTimer=null;}
+
 function refreshUI(){
  try{if(typeof window.recalculateStoredEntries==='function')window.recalculateStoredEntries(window.db)}catch(e){console.warn(e)}
  for(const fn of ['ensureLoginMember','updateLoginIdentityUI','renderInputMembers'])try{if(typeof window[fn]==='function')window[fn]()}catch(e){console.warn(e)}
@@ -396,10 +424,11 @@ async function restoreCurrentOwnerByPin(ownerPin){
   await pullProfilesSafe();refreshUI();return row;
 }
 
-window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.32',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.33',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved')heartbeat().catch(console.warn)});
-window.addEventListener('focus',()=>{if(state.accessStatus==='approved'){heartbeat().catch(console.warn);if(state.dirty)queuePush(false)}});
-window.addEventListener('online',()=>{if(state.dirty)queuePush(false)});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
+window.addEventListener('focus',()=>{if(state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);if(state.dirty)queuePush(false);else checkForRemoteUpdates('focus')}});
+window.addEventListener('pageshow',()=>{if(state.accessStatus==='approved'){startAutomaticReceive();checkForRemoteUpdates('pageshow')}});
+window.addEventListener('online',()=>{if(state.dirty)queuePush(false);else checkForRemoteUpdates('online')});
 })();
