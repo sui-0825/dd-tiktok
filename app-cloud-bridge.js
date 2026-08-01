@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.29 device binding RPC fix */
+/* D&D❀TikTok Ver25.32 shared-save foundation */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -32,6 +32,30 @@ function getDeviceRegistrationId(){
 function rememberDeviceAccount(){try{if(state.user?.id)localStorage.setItem(DEVICE_ACCOUNT_KEY,state.user.id)}catch(_){}}
 
 function hasMeaningfulLocalData(){const d=window.db;return Boolean(d&&typeof d==='object'&&((Array.isArray(d.devices)&&d.devices.length>0)||(Array.isArray(d.entries)&&d.entries.length>0)||(Array.isArray(d.invites)&&d.invites.length>0)));}
+function recordClock(x){return Math.max(Number(x?.editedAt||0),Number(x?.updatedAt||0),Number(x?.timestamp||0),Number(x?.createdAt||0))}
+function mergeRecordArrays(remote=[],local=[]){
+ const map=new Map();
+ for(const row of [...remote,...local]){
+  if(!row||typeof row!=='object')continue;
+  const id=String(row.id||'');
+  if(!id){continue}
+  const prev=map.get(id);
+  if(!prev||recordClock(row)>=recordClock(prev))map.set(id,row);
+ }
+ return [...map.values()];
+}
+function mergeSnapshots(remote={},local={}){
+ const out={...remote,...local};
+ out.devices=mergeRecordArrays(remote.devices,local.devices);
+ out.entries=mergeRecordArrays(remote.entries,local.entries);
+ out.invites=mergeRecordArrays(remote.invites,local.invites);
+ out.bulletins=mergeRecordArrays(remote.bulletins,local.bulletins);
+ out.members=[...new Set([...(remote.members||[]),...(local.members||[])].map(v=>String(v||'').trim()).filter(Boolean))];
+ out.finance={...(remote.finance||{}),...(local.finance||{}),monthly:{...(remote.finance?.monthly||{}),...(local.finance?.monthly||{})},targets:{...(remote.finance?.targets||{}),...(local.finance?.targets||{})}};
+ out.security={...(remote.security||{}),...(local.security||{})};
+ out.currentUser=String(local.currentUser||'');
+ return out;
+}
 async function jsonFetch(url,options={}){const res=await fetch(url,{cache:'no-store',...options});const text=await res.text();let body=null;try{body=text?JSON.parse(text):null}catch(_){body=text}if(!res.ok){const msg=(body&&typeof body==='object'&&(body.message||body.msg||body.error_description||body.error||body.hint||body.details))||text||`HTTP ${res.status}`;throw new Error(`${res.status}: ${msg}`)}return body}
 function saveSession(d){try{localStorage.setItem(TOKEN_KEY,JSON.stringify({access_token:d.access_token,refresh_token:d.refresh_token||'',expires_at:d.expires_at||0,user:d.user}))}catch(_){}}
 function loadStoredSession(){try{const s=JSON.parse(localStorage.getItem(TOKEN_KEY)||'null');if(s?.access_token&&s?.user?.id){state.accessToken=s.access_token;state.user=s.user;return true}}catch(_){}return false}
@@ -253,9 +277,19 @@ async function push(){
  if(state.accessStatus!=='approved'||state.applying||!window.db)return {ok:false,reason:'not_ready'};
  if(navigator.onLine===false){markDirty();setStatus('オフライン・端末に保存済み','local','','offline');scheduleRetry();return {ok:false,reason:'offline'}}
  const seq=state.dirtySeq||Date.now();state.pushingSeq=seq;
- const snapshot=typeof structuredClone==='function'?structuredClone(window.db):JSON.parse(JSON.stringify(window.db));
+ let snapshot=typeof structuredClone==='function'?structuredClone(window.db):JSON.parse(JSON.stringify(window.db));
  setStatus('クラウドへ保存中…','cloud','','push');
  try{
+  // Ver25.32: pull the latest snapshot immediately before writing and merge by record id.
+  // This protects additions made on another phone from being erased by a whole-app overwrite.
+  const latestRows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,payload&limit=1`);
+  const latest=Array.isArray(latestRows)?latestRows[0]:null;
+  if(latest?.payload&&typeof latest.payload==='object'){
+   snapshot=mergeSnapshots(latest.payload,snapshot);
+   state.revision=Math.max(state.revision,Number(latest.revision||0));
+   state.applying=true;window.db=snapshot;state.applying=false;
+   try{const saved=typeof window.compactDBForStorage==='function'?window.compactDBForStorage(window.db):window.db;localStorage.setItem(window.KEY||'dd_tiktok_app_v14_production',JSON.stringify(saved))}catch(_){}
+  }
   const next=Math.max(1,state.revision+1);
   const rows=await rest('app_snapshots?on_conflict=workspace_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({workspace_id:state.workspaceId,revision:next,payload:{...snapshot,currentUser:''},updated_by:state.user?.id||null,updated_at:new Date().toISOString()})});
   state.revision=Number(Array.isArray(rows)&&rows[0]?.revision||next);
@@ -362,7 +396,7 @@ async function restoreCurrentOwnerByPin(ownerPin){
   await pullProfilesSafe();refreshUI();return row;
 }
 
-window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.31',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,pull,push,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.32',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved')heartbeat().catch(console.warn)});

@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.9-quiet-background-sync">
+<meta name="dd-build" content="25.32-shared-save-foundation">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -2965,6 +2965,9 @@ function persist(){
  try{
   localStorage.setItem(KEY,payload);
   localStorage.setItem('dd_last_local_save_v25',String(Date.now()));
+  // Ver25.32: every normal save must enter the cloud queue.
+  // Local storage remains the immediate safety copy; cloud delivery continues asynchronously.
+  queueMicrotask(()=>window.DDCloud?.queuePush?.());
   return true;
  }catch(e){
   console.error('端末保存に失敗:',e);
@@ -5364,7 +5367,7 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
 <script src="./backend-config.js?v=2515"></script>
-<script src="./app-cloud-bridge.js?v=2526"></script>
+<script src="./app-cloud-bridge.js?v=2532"></script>
 <script>
 // Ver23.0: GitHub Pagesで更新を確実に反映するため、旧Service Workerとキャッシュを解除します。
 if ('serviceWorker' in navigator) {
@@ -5401,7 +5404,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.31';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.32';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
