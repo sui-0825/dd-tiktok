@@ -1,1 +1,1 @@
-D&D TikTok Ver25.37 cloud write diagnostic build. Shows six-stage cloud save progress, payload size, timeout, and exact stop point.
+D&D TikTok Ver25.38 connection target diagnostic build. Tap the cloud status pill to compare endpoint, workspace, local/remote revision, counts, pending state, user and access status.

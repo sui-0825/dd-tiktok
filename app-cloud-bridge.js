@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.37 cloud write diagnostics */
+/* D&D❀TikTok Ver25.38 connection target diagnostics */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -482,7 +482,35 @@ async function restoreCurrentOwnerByPin(ownerPin){
   await pullProfilesSafe();refreshUI();return row;
 }
 
-window.DDCloud={state,isConfigured:configured,init,pull,push,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.37',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+async function inspectConnection(){
+ if(!state.user)await ensureAuth();
+ if(!state.workspaceId)await verifyWorkspace();
+ const rows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,updated_at,payload&limit=1`,{timeoutMs:45000});
+ const row=Array.isArray(rows)?rows[0]:null;
+ const payload=row?.payload&&typeof row.payload==='object'?row.payload:{};
+ const local=window.db&&typeof window.db==='object'?window.db:{};
+ return {
+  version:'25.38',
+  endpoint:new URL(base).host,
+  configuredWorkspaceId:String(cfg.workspaceId||''),
+  activeWorkspaceId:String(state.workspaceId||''),
+  localRevision:Number(state.revision||0),
+  remoteRevision:Number(row?.revision||0),
+  remoteUpdatedAt:String(row?.updated_at||''),
+  localDevices:Array.isArray(local.devices)?local.devices.length:0,
+  remoteDevices:Array.isArray(payload.devices)?payload.devices.length:0,
+  localEntries:Array.isArray(local.entries)?local.entries.length:0,
+  remoteEntries:Array.isArray(payload.entries)?payload.entries.length:0,
+  dirty:Boolean(state.dirty),
+  userId:String(state.user?.id||''),
+  role:String(state.role||''),
+  accessStatus:String(state.accessStatus||''),
+  stage:String(state.stage||''),
+  status:String(state.status||''),
+  error:String(state.lastError||'')
+ };
+}
+window.DDCloud={state,isConfigured:configured,init,pull,push,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.38',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
