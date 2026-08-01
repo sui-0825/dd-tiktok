@@ -1,0 +1,11 @@
+D&D TikTok Ver25.45
+
+修正内容:
+- 年間データで既存入力を修正した際に editedAt を記録
+- 年間データで新規入力した際に editedAt と operator を記録
+- 履歴画面からの修正に editedAt / persist / クラウド送信を追加
+- クラウド送信時、更新時刻が同じでも内容が異なる場合は送信元の変更を優先
+- app-cloud-bridge.js のキャッシュバージョンを 2545 に更新
+
+対象不具合:
+Androidで既存入力を変更すると Revision だけ上がり、クラウド本文とiPhone表示が元の値のままになる問題。
