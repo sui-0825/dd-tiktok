@@ -1,1 +1,1 @@
-D&D TikTok Ver25.40 - Android stale dirty queue repair. Clears only stale dirty flags; preserves actual local-only/newer records.
+D&D TikTok Ver25.43 - apply remote payload after dirty-state reconciliation; remote wins equal timestamp ties.
