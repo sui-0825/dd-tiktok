@@ -430,12 +430,26 @@ function queuePush(mark=true){if(mark)markDirty();if(state.recoveryProtected||!s
 
 async function checkForRemoteUpdates(reason='timer'){
  if(state.receiveBusy||state.applying||state.accessStatus!=='approved'||!state.workspaceId||document.visibilityState==='hidden')return {ok:false,reason:'not_ready'};
- if(state.dirty){try{const fixed=await reconcileDirtyStateWithRemote();if(!fixed.cleared){scheduleRetry();return {ok:false,reason:'local_dirty'};}}catch(_){scheduleRetry();return {ok:false,reason:'local_dirty'};}}
  state.receiveBusy=true;
  try{
-  const rows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,updated_at&limit=1`);
+  // Ver25.42: always inspect the remote revision before deciding whether a stale local dirty flag may block receive.
+  const rows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,updated_at,payload&limit=1`);
   const row=Array.isArray(rows)?rows[0]:null;
   const remoteRevision=Number(row?.revision||0);
+  if(state.dirty){
+   try{
+    const fixed=await reconcileDirtyStateWithRemote();
+    if(!fixed.cleared){
+     addDiag('RECEIVE_DIRTY_PROTECTED',`${reason}: local=${state.revision} remote=${remoteRevision}`);
+     scheduleRetry();
+     return {ok:false,reason:'local_dirty',remoteRevision};
+    }
+   }catch(e){
+    addDiag('RECEIVE_DIRTY_CHECK_ERROR',String(e?.message||e));
+    scheduleRetry();
+    return {ok:false,reason:'local_dirty',remoteRevision};
+   }
+  }
   if(remoteRevision>Number(state.revision||0)){
    addDiag('REMOTE_UPDATE',`${reason}: ${state.revision}->${remoteRevision}`);
    const result=await pull();
@@ -451,7 +465,7 @@ async function checkForRemoteUpdates(reason='timer'){
 function startAutomaticReceive(){
  clearInterval(state.receiveTimer);
  if(state.accessStatus!=='approved')return;
- state.receiveTimer=setInterval(()=>checkForRemoteUpdates('interval'),5000);
+ state.receiveTimer=setInterval(()=>checkForRemoteUpdates('interval'),3000);
 }
 function stopAutomaticReceive(){clearInterval(state.receiveTimer);state.receiveTimer=null;}
 
@@ -578,11 +592,11 @@ async function inspectConnection(){
   error:String(state.lastError||'')
  };
 }
-window.DDCloud={state,isConfigured:configured,init,pull,push,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.41',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,pull,push,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.42',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
-window.addEventListener('focus',()=>{if(state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);if(state.dirty)queuePush(false);else checkForRemoteUpdates('focus')}});
+window.addEventListener('focus',()=>{if(state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('focus')}});
 window.addEventListener('pageshow',()=>{if(state.accessStatus==='approved'){startAutomaticReceive();checkForRemoteUpdates('pageshow')}});
-window.addEventListener('online',()=>{if(state.dirty)queuePush(false);else checkForRemoteUpdates('online')});
+window.addEventListener('online',()=>{checkForRemoteUpdates('online')});
 })();
