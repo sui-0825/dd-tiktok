@@ -1,3 +1,5 @@
+// Android emergency solo-input mode: Android saves locally only; iPhone/cloud remain unchanged.
+window.DD_ANDROID_SOLO_MODE = /Android/i.test(navigator.userAgent);
 // D&D❀TikTok Ver16.2 - Supabaseクラウド接続設定済み
 // Publishable keyはブラウザアプリで利用する公開用キーです。
 window.DD_BACKEND_CONFIG = {
