@@ -1,1 +1,1 @@
-D&D TikTok Ver25.49 - Android emergency solo-input mode. Android new entries save locally only; cloud sync is disabled on Android. iPhone behavior unchanged.
+D&D TikTok Ver25.50 emergency Android new-entry mode. New entries are uploaded one-by-one into the latest cloud parent payload; existing edit/delete remains disabled.
