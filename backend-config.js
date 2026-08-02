@@ -5,6 +5,5 @@ window.DD_BACKEND_CONFIG = {
   provider: 'supabase',
   url: 'https://dqistpmkgctbzrxmrtvk.supabase.co',
   anonKey: 'sb_publishable_GngV425KVitnoGG_hZCMSA_A7G2Mlgv',
-  workspaceId: 'df2e6d88-2c02-44cd-9c2d-179b86492a71',
-  siteUrl: 'https://sui-0825.github.io/dd-tiktok/'
+  workspaceId: 'df2e6d88-2c02-44cd-9c2d-179b86492a71'
 };

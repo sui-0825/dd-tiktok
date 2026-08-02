@@ -2,10 +2,10 @@
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
-const TOKEN_KEY='dd_supabase_email_session_v2', LOCAL_USER_KEY='dd_tiktok_local_user_v1', DEVICE_ID_KEY='dd_device_registration_id_v1', DEVICE_ACCOUNT_KEY='dd_device_bound_user_v1', OWNER_UNLOCK_KEY='dd_owner_emergency_unlock_v1', OWNER_FAIL_KEY='dd_owner_pin_fail_v1', DIRTY_KEY='dd_cloud_dirty_v25', DIRTY_SEQ_KEY='dd_cloud_dirty_seq_v25';
+const TOKEN_KEY='dd_supabase_anon_session_v2', LOCAL_USER_KEY='dd_tiktok_local_user_v1', DEVICE_ID_KEY='dd_device_registration_id_v1', DEVICE_ACCOUNT_KEY='dd_device_bound_user_v1', OWNER_UNLOCK_KEY='dd_owner_emergency_unlock_v1', OWNER_FAIL_KEY='dd_owner_pin_fail_v1', DIRTY_KEY='dd_cloud_dirty_v25', DIRTY_SEQ_KEY='dd_cloud_dirty_seq_v25';
 const diag=[];
 function addDiag(step,detail=''){const row={time:new Date().toISOString(),step:String(step),detail:String(detail||'')};diag.push(row);if(diag.length>30)diag.shift();console.log('[DD DIAG]',row);return row}
-const state={email:'',mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,retryTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,receiveTimer:null,receiveBusy:false,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true,dirty:false,dirtySeq:0,pushingSeq:0};
+const state={mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,retryTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,receiveTimer:null,receiveBusy:false,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true,dirty:false,dirtySeq:0,pushingSeq:0};
 const publicState=()=>({...state,syncTimer:undefined,retryTimer:undefined,presenceTimer:undefined,profileTimer:undefined,accessTimer:undefined,accessToken:undefined,user:state.user?{id:state.user.id}:null});
 
 function loadDirtyState(){try{state.dirty=localStorage.getItem(DIRTY_KEY)==='1';state.dirtySeq=Number(localStorage.getItem(DIRTY_SEQ_KEY)||0)}catch(_){state.dirty=false;state.dirtySeq=0}}
@@ -19,7 +19,6 @@ const emitAccess=()=>window.dispatchEvent(new CustomEvent('dd-access-state',{det
 function setStatus(status,mode=state.mode,error='',stage=state.stage){state.status=status;state.mode=mode;state.lastError=error||'';state.stage=stage||'';document.documentElement.dataset.storageMode=mode;document.documentElement.dataset.cloudStage=state.stage;emit()}
 const configured=()=>Boolean(cfg.enabled&&cfg.provider==='supabase'&&cfg.url&&cfg.anonKey&&cfg.workspaceId);
 const base=String(cfg.url||'').replace(/\/+$/,''), api=p=>`${base}${p}`;
-const APP_REDIRECT_URL=String(cfg.siteUrl||'https://sui-0825.github.io/dd-tiktok/');
 const authHeaders=()=>({apikey:cfg.anonKey,Authorization:`Bearer ${state.accessToken}`,'Content-Type':'application/json'});
 const getLocalUserName=()=>{try{return String(localStorage.getItem(LOCAL_USER_KEY)||'').trim()}catch(_){return ''}};
 
@@ -121,75 +120,7 @@ async function jsonFetch(url,options={}){
 function saveSession(d){try{localStorage.setItem(TOKEN_KEY,JSON.stringify({access_token:d.access_token,refresh_token:d.refresh_token||'',expires_at:d.expires_at||0,user:d.user}))}catch(_){}}
 function loadStoredSession(){try{const s=JSON.parse(localStorage.getItem(TOKEN_KEY)||'null');if(s?.access_token&&s?.user?.id){state.accessToken=s.access_token;state.user=s.user;return true}}catch(_){}return false}
 function clearSession(){try{localStorage.removeItem(TOKEN_KEY)}catch(_){}state.accessToken='';state.user=null}
-async function consumeEmailLinkSession(){
- try{
-  const hash=new URLSearchParams(String(location.hash||'').replace(/^#/,''));
-  const query=new URLSearchParams(location.search||'');
-  const error=hash.get('error_description')||query.get('error_description')||hash.get('error')||query.get('error');
-  if(error)throw new Error(decodeURIComponent(error));
-  const accessToken=hash.get('access_token')||query.get('access_token');
-  const refreshToken=hash.get('refresh_token')||query.get('refresh_token')||'';
-  if(!accessToken)return false;
-  state.accessToken=accessToken;
-  const user=await jsonFetch(api('/auth/v1/user'),{headers:{apikey:cfg.anonKey,Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'}});
-  if(!user?.id||!user?.email)throw new Error('メール本人確認の情報を取得できませんでした');
-  state.user=user;state.email=String(user.email||'');
-  saveSession({access_token:accessToken,refresh_token:refreshToken,user});
-  rememberDeviceAccount();
-  history.replaceState(null,document.title,location.pathname+location.search.replace(/([?&])(access_token|refresh_token|expires_in|expires_at|token_type|type)=[^&]*/g,'').replace(/[?&]$/,'') );
-  addDiag('EMAIL_LINK_OK',state.email);
-  return true;
- }catch(e){
-  addDiag('EMAIL_LINK_ERROR',e.message||e);
-  setStatus(`メール認証エラー: ${String(e.message||e).slice(0,80)}`,'error',e.message,'email-link-error');
-  try{history.replaceState(null,document.title,location.pathname)}catch(_){}
-  return false;
- }
-}
-async function ensureAuth(){
- addDiag('AUTH_START',loadStoredSession()?'stored-session':'email-required');
- setStatus('認証を確認中…','cloud','','auth-check');
- if(loadStoredSession()){
-  try{
-   state.user=await jsonFetch(api('/auth/v1/user'),{headers:authHeaders()});
-   if(!state.user?.email){clearSession();throw new Error('メールログインが必要です')}
-   state.email=String(state.user.email||'');
-   return state.user;
-  }catch(e){clearSession()}
- }
- state.accessStatus='login_required';state.role='';
- setStatus('メールでログインしてください','cloud','','login-required');emitAccess();
- return null;
-}
-async function sendEmailCode(email){
- const clean=String(email||'').trim().toLowerCase();
- if(!/^\S+@\S+\.\S+$/.test(clean))throw new Error('正しいメールアドレスを入力してください');
- setStatus('ログインメールを送信中…','cloud','','email-link-send');
- await jsonFetch(api('/auth/v1/otp'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:JSON.stringify({email:clean,create_user:true,email_redirect_to:APP_REDIRECT_URL,data:{app:'dd-tiktok'}})});
- state.email=clean;try{sessionStorage.setItem('dd_login_email_v1',clean)}catch(_){}
- setStatus('メールのログインリンクを押してください','cloud','','email-link-sent');
- return {ok:true,email:clean};
-}
-async function verifyEmailCode(email,token){
- const clean=String(email||state.email||'').trim().toLowerCase();
- const code=String(token||'').replace(/\s+/g,'');
- if(!clean)throw new Error('メールアドレスを入力してください');
- if(!code)throw new Error('メールに届いた確認コードを入力してください');
- setStatus('本人確認中…','cloud','','email-verify');
- const d=await jsonFetch(api('/auth/v1/verify'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:JSON.stringify({email:clean,token:code,type:'email'})});
- if(!d?.access_token||!d?.user?.id)throw new Error('本人確認に失敗しました');
- state.accessToken=d.access_token;state.user=d.user;state.email=clean;saveSession(d);
- rememberDeviceAccount();
- await verifyWorkspace();
- const name=getLocalUserName();
- if(name)await requestAccess(name);else{state.accessStatus='name_required';setStatus('表示名を登録してください','cloud','','name-required');emitAccess()}
- return d.user;
-}
-async function signOutEmail(){
- try{if(state.accessToken)await jsonFetch(api('/auth/v1/logout'),{method:'POST',headers:authHeaders()})}catch(_){}
- clearSession();state.email='';state.role='';state.accessStatus='login_required';stopAccessPolling();stopPresence();stopAutomaticReceive();
- setStatus('ログアウトしました','cloud','','login-required');emitAccess();return true;
-}
+async function ensureAuth(){addDiag('AUTH_START',loadStoredSession()?'stored-session':'new-anonymous');setStatus('認証を確認中…','cloud','','auth-check');if(loadStoredSession()){try{state.user=await jsonFetch(api('/auth/v1/user'),{headers:authHeaders()});return state.user}catch(_){clearSession()}}setStatus('匿名ログイン中…','cloud','','auth-anonymous');let d;try{d=await jsonFetch(api('/auth/v1/signup'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:JSON.stringify({data:{app:'dd-tiktok'}})})}catch(e){d=await jsonFetch(api('/auth/v1/signup'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:'{}'}).catch(()=>{throw e})}if(!d?.access_token||!d?.user?.id){addDiag('AUTH_FAIL','access_token/user_id missing');throw new Error('匿名ログインに失敗しました')}state.accessToken=d.access_token;state.user=d.user;saveSession(d);addDiag('AUTH_OK',d.user.id);return d.user}
 async function rest(path,options={}){if(!state.accessToken)throw new Error('認証トークンがありません');return jsonFetch(api(`/rest/v1/${path}`),{...options,headers:{...authHeaders(),...(options.headers||{})}})}
 async function rpc(name,payload){return rest(`rpc/${name}`,{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(payload||{})})}
 async function verifyWorkspace(){addDiag('WORKSPACE_START',cfg.workspaceId||'未設定');setStatus('ワークスペース確認中…','cloud','','workspace');let rows=[];if(cfg.workspaceId)rows=await rest(`workspaces?id=eq.${encodeURIComponent(cfg.workspaceId)}&select=id,name&limit=1`);if(!Array.isArray(rows)||!rows[0]?.id)rows=await rest('workspaces?select=id,name&order=created_at.asc&limit=1');if(!Array.isArray(rows)||!rows[0]?.id)throw new Error('ワークスペースがありません');state.workspaceId=rows[0].id;addDiag('WORKSPACE_OK',state.workspaceId);return state.workspaceId}
@@ -496,50 +427,63 @@ async function seedCompanyData(payload){
  return {ok:true,revision:state.revision};
 }
 
-// Ver25.50: Android emergency new-entry upload.
-// Upload only the newly-created entry (and its device row) into the latest cloud payload.
-// This avoids whole-snapshot overwrite while recovery protection is active.
+// Ver25.51: stable single-entry upload for iPhone / Android / edits.
+// Uses optimistic concurrency: update only when the cloud revision still matches.
+// If another phone saves first, refetch, merge and retry instead of overwriting it.
 async function pushEntryById(entryId){
  if(state.accessStatus!=='approved'||!state.workspaceId||!state.user) return {ok:false,reason:'not_ready'};
- if(navigator.onLine===false) return {ok:false,reason:'offline'};
+ if(navigator.onLine===false){markDirty();scheduleRetry();return {ok:false,reason:'offline'}};
  const id=String(entryId||'');
  const localEntry=(window.db?.entries||[]).find(e=>String(e?.id||'')===id);
  if(!localEntry) return {ok:false,reason:'entry_not_found'};
- setStatus('新規入力1件を共有保存中…','cloud','','entry-upload');
- try{
-  const latestRows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,payload&limit=1`,{timeoutMs:45000});
-  const latest=Array.isArray(latestRows)?latestRows[0]:null;
-  if(!latest?.payload||typeof latest.payload!=='object') throw new Error('会社親データを取得できませんでした');
-  const remote=typeof structuredClone==='function'?structuredClone(latest.payload):JSON.parse(JSON.stringify(latest.payload));
-  remote.entries=Array.isArray(remote.entries)?remote.entries:[];
-  const pos=remote.entries.findIndex(e=>String(e?.id||'')===id);
-  const copy=typeof structuredClone==='function'?structuredClone(localEntry):JSON.parse(JSON.stringify(localEntry));
-  if(pos>=0) remote.entries[pos]=copy; else remote.entries.push(copy);
-  const did=String(copy.deviceId||'');
-  const localDevice=(window.db?.devices||[]).find(d=>String(d?.id||'')===did);
-  if(localDevice){
-   remote.devices=Array.isArray(remote.devices)?remote.devices:[];
-   const dp=remote.devices.findIndex(d=>String(d?.id||'')===did);
-   const dc=typeof structuredClone==='function'?structuredClone(localDevice):JSON.parse(JSON.stringify(localDevice));
-   if(dp>=0) remote.devices[dp]=dc; else remote.devices.push(dc);
+ setStatus('入力1件を共有保存中…','cloud','','entry-upload');
+ let lastError=null;
+ for(let attempt=1;attempt<=6;attempt++){
+  try{
+   const latestRows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,payload&limit=1`,{timeoutMs:45000});
+   const latest=Array.isArray(latestRows)?latestRows[0]:null;
+   if(!latest?.payload||typeof latest.payload!=='object') throw new Error('会社親データを取得できませんでした');
+   const remote=typeof structuredClone==='function'?structuredClone(latest.payload):JSON.parse(JSON.stringify(latest.payload));
+   remote.entries=Array.isArray(remote.entries)?remote.entries:[];
+   const pos=remote.entries.findIndex(e=>String(e?.id||'')===id);
+   const copy=typeof structuredClone==='function'?structuredClone(localEntry):JSON.parse(JSON.stringify(localEntry));
+   if(pos>=0) remote.entries[pos]=copy; else remote.entries.push(copy);
+   const did=String(copy.deviceId||'');
+   const localDevice=(window.db?.devices||[]).find(d=>String(d?.id||'')===did);
+   if(localDevice){
+    remote.devices=Array.isArray(remote.devices)?remote.devices:[];
+    const dp=remote.devices.findIndex(d=>String(d?.id||'')===did);
+    const dc=typeof structuredClone==='function'?structuredClone(localDevice):JSON.parse(JSON.stringify(localDevice));
+    if(dp>=0) remote.devices[dp]=dc; else remote.devices.push(dc);
+   }
+   if(typeof window.recalculateStoredEntries==='function') window.recalculateStoredEntries(remote);
+   remote.currentUser='';
+   const currentRevision=Number(latest.revision||0);
+   const next=Math.max(1,currentRevision+1);
+   const rows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&revision=eq.${currentRevision}`,{
+    method:'PATCH',headers:{Prefer:'return=representation'},
+    body:JSON.stringify({revision:next,payload:remote,updated_by:state.user.id,updated_at:new Date().toISOString()}),timeoutMs:45000
+   });
+   if(Array.isArray(rows)&&rows.length){
+    state.revision=Number(rows[0]?.revision||next);
+    state.recoveryProtected=false;
+    clearDirty(state.dirtySeq);
+    setStatus('入力を共有保存しました','cloud','','entry-complete');
+    return {ok:true,revision:state.revision,entryId:id,attempt};
+   }
+   // Revision changed between GET and PATCH. Another device won; retry with its newest payload.
+   addDiag('ENTRY_CONFLICT_RETRY',`id=${id} attempt=${attempt}`);
+   await new Promise(r=>setTimeout(r,120*attempt));
+  }catch(e){
+   lastError=e;
+   addDiag('ENTRY_UPLOAD_RETRY',`id=${id} attempt=${attempt} ${e?.message||e}`);
+   if(attempt<6) await new Promise(r=>setTimeout(r,250*attempt));
   }
-  if(typeof window.recalculateStoredEntries==='function') window.recalculateStoredEntries(remote);
-  remote.currentUser='';
-  const next=Math.max(1,Number(latest.revision||0)+1);
-  const rows=await rest('app_snapshots?on_conflict=workspace_id',{
-   method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},
-   body:JSON.stringify({workspace_id:state.workspaceId,revision:next,payload:remote,updated_by:state.user.id,updated_at:new Date().toISOString()}),timeoutMs:45000
-  });
-  state.revision=Number(Array.isArray(rows)&&rows[0]?.revision||next);
-  state.recoveryProtected=false;
-  state.dirty=false;state.dirtySeq=0;
-  try{localStorage.removeItem(DIRTY_KEY);localStorage.removeItem(DIRTY_SEQ_KEY)}catch(_){}
-  setStatus('新規入力を共有保存しました','cloud','','entry-complete');
-  return {ok:true,revision:state.revision,entryId:id};
- }catch(e){
-  setStatus('新規入力の共有保存に失敗','error',e?.message||String(e),'entry-error');
-  return {ok:false,reason:e?.message||String(e)};
  }
+ markDirty();scheduleRetry();
+ const message=lastError?.message||'同時更新が続いたため保存を再試行します';
+ setStatus('入力の共有保存を再試行中','error',message,'entry-error');
+ return {ok:false,reason:message};
 }
 
 function queuePush(mark=true){if(mark)markDirty();if(state.recoveryProtected||!state.user||state.accessStatus!=='approved'||state.applying)return;clearTimeout(state.syncTimer);state.syncTimer=setTimeout(()=>push().catch(()=>scheduleRetry()),700)}
@@ -640,7 +584,7 @@ async function updateMember(userId,patch){
  if(status==='approved'){allowed.approved_at=new Date().toISOString();allowed.approved_by=state.user.id}
  await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&user_id=eq.${encodeURIComponent(userId)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(allowed)});return true
 }
-async function init(){if(!configured()){setStatus('設定不足・端末内保存','local','backend-config.jsの設定不足','config');return}try{setStatus('Supabaseへ接続中…','cloud','','connect');await consumeEmailLinkSession();const user=await ensureAuth();if(!user)return;await verifyWorkspace();const name=getLocalUserName();if(name)await requestAccess(name);else{state.accessStatus='name_required';setStatus('名前を登録してください','cloud','','name-required');emitAccess()}}catch(e){console.error(e);setStatus(`接続失敗: ${String(e.message||'不明').slice(0,80)}`,'error',e.message,state.stage||'error')}}
+async function init(){if(!configured()){setStatus('設定不足・端末内保存','local','backend-config.jsの設定不足','config');return}try{setStatus('Supabaseへ接続中…','cloud','','connect');await ensureAuth();await verifyWorkspace();const name=getLocalUserName();if(name)await requestAccess(name);else{setStatus('名前を登録してください','cloud','','name-required');emitAccess()}}catch(e){console.error(e);setStatus(`接続失敗: ${String(e.message||'不明').slice(0,80)}`,'error',e.message,state.stage||'error')}}
 
 async function recoverFromCloud(displayName,pin){
  const name=String(displayName||'').trim();
@@ -756,7 +700,7 @@ async function inspectConnection(){
   error:String(state.lastError||'')
  };
 }
-window.DDCloud={state,isConfigured:configured,init,sendEmailCode,verifyEmailCode,signOutEmail,pull,push,pushEntryById,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.54',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,pull,push,pushEntryById,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.51',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});

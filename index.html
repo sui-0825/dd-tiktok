@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.54-email-link-return-fix">
+<meta name="dd-build" content="25.55-public-access-restore">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -2191,10 +2191,6 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
 }
 #errorOverlay .error-report-mast{position:relative}
 </style>
-
-<style id="v2553-email-login-style">
-.first-login-card input+input{margin-top:10px}.email-login-back{background:#ece7dd!important;color:#385064!important;box-shadow:none!important;margin-top:8px!important}.login-note.login-error{color:#b75f5d;font-weight:800}.login-note.login-success{color:#55745f;font-weight:800}
-</style>
 </head>
 <body>
 <div id="toast" class="toast"></div>
@@ -2850,21 +2846,13 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
 
 <div id="firstLoginOverlay" class="first-login-overlay" role="dialog" aria-modal="true" aria-labelledby="firstLoginTitle">
   <div class="first-login-card">
-    <div class="first-login-mark">✉️</div>
-    <small>D&amp;D SECURE LOGIN</small>
-    <h2 id="firstLoginTitle">本人ログイン</h2>
-    <p id="emailLoginLead">メールアドレスで本人を固定します。<br>名前はアプリ内の表示用です。</p>
-    <div id="emailLoginForm">
-      <input id="firstLoginEmailInput" type="email" maxlength="120" autocomplete="email" placeholder="メールアドレス">
-      <input id="firstLoginNameInput" type="text" maxlength="20" autocomplete="name" placeholder="表示名（例：沙耶加）" style="margin-top:10px">
-      <button id="sendEmailCodeBtn" type="button" onclick="startEmailLogin()">ログインメールを受け取る</button>
-    </div>
-    <div id="emailCodeForm" hidden>
-      <input id="firstLoginCodeInput" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="メールに届いた確認コード">
-      <button id="verifyEmailCodeBtn" type="button" onclick="completeEmailLogin()">確認してログイン</button>
-      <button type="button" class="email-login-back" onclick="resetEmailLogin()">メールアドレスを変更</button>
-    </div>
-    <div id="emailLoginMessage" class="login-note">メールに届く「Sign in」を押すと、このアプリへ戻って本人ログインします。</div>
+    <div class="first-login-mark">🏨</div>
+    <small>D&amp;D GRAND HOTEL</small>
+    <h2 id="firstLoginTitle">はじめまして</h2>
+    <p>このアプリを使う本人の名前を登録してください。<br>今日入力の担当者として自動で記録されます。</p>
+    <input id="firstLoginNameInput" type="text" maxlength="20" autocomplete="name" placeholder="例：沙耶加">
+    <button type="button" onclick="completeFirstLogin()">この名前で始める</button>
+    <div class="login-note">名前はこの端末に安全に保存されます。クラウド接続後は、同じチームのメンバー一覧へ自動追加されます。</div>
   </div>
 </div>
 
@@ -2984,7 +2972,7 @@ function persist(){
  const payload=JSON.stringify(compactDBForStorage(db));
  // Ver25.34: cloud delivery must never be blocked by an iPhone localStorage quota error.
  // Mark the change for cloud delivery first, then attempt the local safety copy.
- if(!/Android/i.test(navigator.userAgent)) queueMicrotask(()=>window.DDCloud?.queuePush?.());
+ if(!window.DD_SKIP_AUTO_PUSH) queueMicrotask(()=>window.DDCloud?.queuePush?.());
  try{
   localStorage.setItem(KEY,payload);
   localStorage.setItem('dd_last_local_save_v25',String(Date.now()));
@@ -3586,19 +3574,16 @@ function performEntrySave({deviceId,p,date,memo,operator='メイン',replaceEntr
    const dev=db.devices.find(x=>x.id===deviceId);if(dev)initDeviceGenerations(dev);savedEntryId=uid();db.entries.push({id:savedEntryId,deviceId,generationId:dev?.currentGenerationId||'',date,month:date.slice(0,7),year:date.slice(0,4),timestamp:ts,memo,operator:operator||'メイン',...result});
    recalculateDevice(deviceId);
   }
-  persist();clearEntryDraft();
+  window.DD_SKIP_AUTO_PUSH=true;
+  persist();
+  window.DD_SKIP_AUTO_PUSH=false;
+  clearEntryDraft();
   // Ver25.37: do not claim shared save until the cloud confirms it.
   toast(replaceEntryId?'端末へ変更内容を保存しました。共有保存を確認中…':'端末へ保存しました。共有保存を確認中…');
   setTimeout(async()=>{
    try{
-    let result;
-    if(/Android/i.test(navigator.userAgent)&&!replaceEntryId){
-     if(!window.DDCloud?.pushEntryById)throw new Error('緊急入力保存がまだ準備できていません');
-     result=await window.DDCloud.pushEntryById(savedEntryId);
-    }else{
-     if(!window.DDCloud?.syncNow)throw new Error('クラウド接続がまだ準備できていません');
-     result=await window.DDCloud.syncNow();
-    }
+    if(!window.DDCloud?.pushEntryById)throw new Error('1件保存がまだ準備できていません');
+    const result=await window.DDCloud.pushEntryById(savedEntryId);
     if(!result?.ok)throw new Error(result?.reason||'クラウド保存を確認できませんでした');
     toast(replaceEntryId?'変更を共有保存しました':'入力を共有保存しました');
    }catch(cloudError){
@@ -5118,40 +5103,25 @@ function showFirstLogin(){
  el.classList.add('show');
  setTimeout(()=>document.getElementById('firstLoginNameInput')?.focus(),120);
 }
-function setEmailLoginMessage(text,kind=''){
- const el=document.getElementById('emailLoginMessage');if(!el)return;el.textContent=String(text||'');el.classList.toggle('login-error',kind==='error');el.classList.toggle('login-success',kind==='success');
+function completeFirstLogin(){
+ const input=document.getElementById('firstLoginNameInput');
+ const name=String(input?.value||'').trim();
+ if(!name){toast('名前を入力してください');input?.focus();return}
+ ensureMembers();
+ db.currentUser=name;
+ try{localStorage.setItem(DD_LOCAL_USER_KEY,name)}catch(_){ }
+ if(!db.members.includes(name))db.members.push(name);
+ currentInputOperator=name;
+ persist();
+ document.getElementById('firstLoginOverlay')?.classList.remove('show');
+ updateLoginIdentityUI();renderInputMembers();
+ toast(`${name}さんで登録しました`);
+ // 初回登録直後にクラウドへ利用申請。新規メンバーは承認待ち、オーナーは暗証番号で復旧可能。
+ if(window.DDCloud?.requestAccess){
+  showAccessGate('チェックイン手続き中','オーナーがお部屋をご用意しています。<br>ラウンジでごゆっくりお待ちください。',true,'pending');
+  window.DDCloud.requestAccess(name).catch(e=>showAccessGate('確認できませんでした',`${esc(e.message||'通信状態を確認してください')}<br>もう一度お試しください。`,true,'error'));
+ }
 }
-async function startEmailLogin(){
- const email=String(document.getElementById('firstLoginEmailInput')?.value||'').trim().toLowerCase();
- const name=String(document.getElementById('firstLoginNameInput')?.value||'').trim();
- if(!email){setEmailLoginMessage('メールアドレスを入力してください','error');return}
- if(!name){setEmailLoginMessage('表示名を入力してください','error');return}
- const btn=document.getElementById('sendEmailCodeBtn');if(btn)btn.disabled=true;
- try{
-  try{localStorage.setItem(DD_LOCAL_USER_KEY,name);sessionStorage.setItem('dd_login_email_v1',email)}catch(_){}
-  await window.DDCloud?.sendEmailCode?.(email);
-  document.getElementById('emailLoginForm').hidden=false;document.getElementById('emailCodeForm').hidden=true;
-  setEmailLoginMessage(`${email} にログインメールを送りました。メール内の「Sign in」を押してください。`,'success');
- }catch(e){setEmailLoginMessage(e.message||'確認コードを送れませんでした','error')}
- finally{if(btn)btn.disabled=false}
-}
-async function completeEmailLogin(){
- const email=String(document.getElementById('firstLoginEmailInput')?.value||sessionStorage.getItem('dd_login_email_v1')||'').trim().toLowerCase();
- const code=String(document.getElementById('firstLoginCodeInput')?.value||'').trim();
- const name=String(document.getElementById('firstLoginNameInput')?.value||localStorage.getItem(DD_LOCAL_USER_KEY)||'').trim();
- if(!code){setEmailLoginMessage('確認コードを入力してください','error');return}
- const btn=document.getElementById('verifyEmailCodeBtn');if(btn)btn.disabled=true;
- try{
-  await window.DDCloud?.verifyEmailCode?.(email,code);
-  ensureMembers();db.currentUser=name;if(!db.members.includes(name))db.members.push(name);currentInputOperator=name;persist();
-  document.getElementById('firstLoginOverlay')?.classList.remove('show');updateLoginIdentityUI();renderInputMembers();
-  toast(`${name}さんでログインしました`);
- }catch(e){setEmailLoginMessage(e.message||'確認コードを確認できませんでした','error')}
- finally{if(btn)btn.disabled=false}
-}
-function resetEmailLogin(){document.getElementById('emailLoginForm').hidden=false;document.getElementById('emailCodeForm').hidden=true;document.getElementById('firstLoginCodeInput').value='';setEmailLoginMessage('メールアドレスと表示名を確認して、もう一度コードを送ってください。')}
-function completeFirstLogin(){return startEmailLogin()}
-
 function requireLogin(){
  ensureLoginMember();
  if(db.currentUser)return true;
@@ -5163,8 +5133,8 @@ window.addEventListener('DOMContentLoaded',()=>{
  ensureLoginMember();updateLoginIdentityUI();renderInputMembers();
  const input=document.getElementById('firstLoginNameInput');
  input?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();completeFirstLogin()}});
- setTimeout(()=>{if(!window.DDCloud?.state?.user)showFirstLogin();else if(!db.currentUser)showFirstLogin()},500);
- if(db.currentUser)persist();
+ if(!db.currentUser)setTimeout(showFirstLogin,180);
+ else persist();
 });
 </script>
 
@@ -5243,7 +5213,7 @@ async function retryAccessCheck(){
   showAccessGate('接続診断結果',body,true,'error');
  }
 }
-window.addEventListener('dd-access-state',e=>{ddAccessState=e.detail||{};let ownerRecovered=false;try{ownerRecovered=localStorage.getItem('dd_owner_emergency_unlock_v1')==='1'||localStorage.getItem('dd_owner_role_permanent_v18')==='owner'}catch(_){}if(ownerRecovered){ddAccessState.role='owner';ddAccessState.accessStatus='approved';hideAccessGate();ddPreviousAccessStatus='approved';return}const s=ddAccessState.accessStatus;if(s==='login_required'||s==='name_required'){hideAccessGate();showFirstLogin();ddPreviousAccessStatus=s;return}const becameApproved=s==='approved'&&ddPreviousAccessStatus==='pending';if(s==='approved'){if(becameApproved)playHotelWelcome();else hideAccessGate()}else if(s==='pending'){showAccessGate('チェックイン手続き中','オーナーがお部屋をご用意しています。<br>ラウンジでごゆっくりお待ちください。',true,'pending')}else if(s==='suspended'){showAccessGate('CHECK OUT','ご利用ありがとうございました。<br>再度ご利用の際はオーナーへお声がけください。',false,'suspended')}else if(s==='rejected'){showAccessGate('ご案内できませんでした','今回はチェックインを承認できませんでした。<br>オーナーへお問い合わせください。',false,'rejected')}ddPreviousAccessStatus=s;});
+window.addEventListener('dd-access-state',e=>{ddAccessState=e.detail||{};let ownerRecovered=false;try{ownerRecovered=localStorage.getItem('dd_owner_emergency_unlock_v1')==='1'||localStorage.getItem('dd_owner_role_permanent_v18')==='owner'}catch(_){}if(ownerRecovered){ddAccessState.role='owner';ddAccessState.accessStatus='approved';hideAccessGate();ddPreviousAccessStatus='approved';return}const s=ddAccessState.accessStatus;const becameApproved=s==='approved'&&ddPreviousAccessStatus==='pending';if(s==='approved'){if(becameApproved)playHotelWelcome();else hideAccessGate()}else if(s==='pending'){showAccessGate('チェックイン手続き中','オーナーがお部屋をご用意しています。<br>ラウンジでごゆっくりお待ちください。',true,'pending')}else if(s==='suspended'){showAccessGate('CHECK OUT','ご利用ありがとうございました。<br>再度ご利用の際はオーナーへお声がけください。',false,'suspended')}else if(s==='rejected'){showAccessGate('ご案内できませんでした','今回はチェックインを承認できませんでした。<br>オーナーへお問い合わせください。',false,'rejected')}ddPreviousAccessStatus=s;});
 const _completeFirstLoginV17=window.completeFirstLogin;window.completeFirstLogin=function(){_completeFirstLoginV17.apply(this,arguments);const name=String(localStorage.getItem('dd_tiktok_local_user_v1')||'').trim();if(name){showAccessGate('チェックイン手続き中','フロントへ利用申請を送っています。<br>少々お待ちください。',false,'pending');setTimeout(()=>window.DDCloud?.requestAccess(name).catch(e=>showAccessGate('チェックインできませんでした',esc(e.message||'通信状態を確認してください'),true,'error')),250)}};
 
 function openGearMenu(){document.getElementById('gearMenuBackdrop')?.classList.add('show');document.body.style.overflow='hidden'}
@@ -5455,8 +5425,8 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 </style>
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
-<script src="./backend-config.js?v=2553"></script>
-<script src="./app-cloud-bridge.js?v=2553"></script>
+<script src="./backend-config.js?v=2555"></script>
+<script src="./app-cloud-bridge.js?v=2555"></script>
 <script>
 // Ver23.0: GitHub Pagesで更新を確実に反映するため、旧Service Workerとキャッシュを解除します。
 if ('serviceWorker' in navigator) {
@@ -5475,14 +5445,14 @@ if ('serviceWorker' in navigator) {
 
 
 <script id="v141-cloud-ui">
-let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=document.getElementById('cloudStatusPill');if(!el)return;const d=e.detail||{};clearTimeout(ddCloudHideTimer);el.classList.remove('dd-cloud-hide');el.textContent=d.status||'端末内保存';el.dataset.mode=d.mode||'local';el.title=d.error||'';el.onclick=async()=>{el.textContent='接続先を確認中…';try{const x=await window.DDCloud?.inspectConnection?.();const t=await window.DDCloud?.inspectTrackedEntry?.('Air2','2026-08-01');const fmt=(z)=>{const e=z?.entry;return '件数: '+(z?.count??0)+'\n記録: '+(e?('raw='+e.raw+' / input='+e.inputValue+' / 増加='+e.increase+' / PayPay='+e.profit+' / 未確定='+e.pending+' / operator='+e.operator):'見つかりません')+'\n8/1集計: 増加='+Number(z?.totals?.increase||0)+' / PayPay='+Number(z?.totals?.profit||0)+' / 未確定='+Number(z?.totals?.pending||0)+' / 件数='+Number(z?.totals?.count||0)};alert('Air2・8月1日・431 追跡診断 Ver25.54\n\n【Android/iPhone端末内】\n'+fmt(t?.local)+'\n\n【クラウド本文】\n'+fmt(t?.remote)+'\n\n端末Revision: '+t.localRevision+' / クラウドRevision: '+t.remoteRevision+'\nクラウド更新: '+(t.remoteUpdatedAt||'-')+'\n\n--- 接続情報 ---\n接続先: '+(x.endpoint||'-')+'\n設定Workspace: '+(x.configuredWorkspaceId||'-')+'\n実際Workspace: '+(x.activeWorkspaceId||'-')+'\n\n端末Revision: '+x.localRevision+'\nクラウドRevision: '+x.remoteRevision+'\nクラウド更新: '+(x.remoteUpdatedAt||'-')+'\n\n端末台数: '+x.localDevices+' / クラウド: '+x.remoteDevices+'\n端末履歴: '+x.localEntries+' / クラウド: '+x.remoteEntries+'\n未送信: '+(x.dirty?'あり':'なし')+'\n利用者ID: '+(x.userId||'-')+'\n権限: '+(x.role||'-')+' / '+(x.accessStatus||'-')+'\n状態: '+(x.status||'-')+'\nエラー: '+(x.error||'なし'));}catch(err){const x=window.DDCloud?.getDiagnostics?.()||d;alert('接続先診断に失敗しました\n'+String(err?.message||err)+'\n\nWorkspace: '+(x.workspaceId||'-')+'\nRevision: '+(x.revision||0));}};if((d.mode||'')==='cloud'){ddCloudHideTimer=setTimeout(()=>el.classList.add('dd-cloud-hide'),2200);}});
+let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=document.getElementById('cloudStatusPill');if(!el)return;const d=e.detail||{};clearTimeout(ddCloudHideTimer);el.classList.remove('dd-cloud-hide');el.textContent=d.status||'端末内保存';el.dataset.mode=d.mode||'local';el.title=d.error||'';el.onclick=async()=>{el.textContent='接続先を確認中…';try{const x=await window.DDCloud?.inspectConnection?.();const t=await window.DDCloud?.inspectTrackedEntry?.('Air2','2026-08-01');const fmt=(z)=>{const e=z?.entry;return '件数: '+(z?.count??0)+'\n記録: '+(e?('raw='+e.raw+' / input='+e.inputValue+' / 増加='+e.increase+' / PayPay='+e.profit+' / 未確定='+e.pending+' / operator='+e.operator):'見つかりません')+'\n8/1集計: 増加='+Number(z?.totals?.increase||0)+' / PayPay='+Number(z?.totals?.profit||0)+' / 未確定='+Number(z?.totals?.pending||0)+' / 件数='+Number(z?.totals?.count||0)};alert('Air2・8月1日・431 追跡診断 Ver25.55\n\n【Android/iPhone端末内】\n'+fmt(t?.local)+'\n\n【クラウド本文】\n'+fmt(t?.remote)+'\n\n端末Revision: '+t.localRevision+' / クラウドRevision: '+t.remoteRevision+'\nクラウド更新: '+(t.remoteUpdatedAt||'-')+'\n\n--- 接続情報 ---\n接続先: '+(x.endpoint||'-')+'\n設定Workspace: '+(x.configuredWorkspaceId||'-')+'\n実際Workspace: '+(x.activeWorkspaceId||'-')+'\n\n端末Revision: '+x.localRevision+'\nクラウドRevision: '+x.remoteRevision+'\nクラウド更新: '+(x.remoteUpdatedAt||'-')+'\n\n端末台数: '+x.localDevices+' / クラウド: '+x.remoteDevices+'\n端末履歴: '+x.localEntries+' / クラウド: '+x.remoteEntries+'\n未送信: '+(x.dirty?'あり':'なし')+'\n利用者ID: '+(x.userId||'-')+'\n権限: '+(x.role||'-')+' / '+(x.accessStatus||'-')+'\n状態: '+(x.status||'-')+'\nエラー: '+(x.error||'なし'));}catch(err){const x=window.DDCloud?.getDiagnostics?.()||d;alert('接続先診断に失敗しました\n'+String(err?.message||err)+'\n\nWorkspace: '+(x.workspaceId||'-')+'\nRevision: '+(x.revision||0));}};if((d.mode||'')==='cloud'){ddCloudHideTimer=setTimeout(()=>el.classList.add('dd-cloud-hide'),2200);}});
 </script>
 
 <!-- Ver25.4: 共同編集者はクラウド復元画面ではなく、通常のホテルチェックイン承認フローへ進みます。 -->
 
 
 
-<script id="v2553-hard-checkin-fix">
+<script id="v255-hard-checkin-fix">
 (function(){
   // Ver25.8: old Ver25.3 recovery overlay must never survive after deployment.
   const removeOldRecovery=()=>{
@@ -5493,7 +5463,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.54';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.55';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
