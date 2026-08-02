@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.45-entry-edit-sync-fix">
+<meta name="dd-build" content="25.51-stable-entry-sync">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -2972,7 +2972,7 @@ function persist(){
  const payload=JSON.stringify(compactDBForStorage(db));
  // Ver25.34: cloud delivery must never be blocked by an iPhone localStorage quota error.
  // Mark the change for cloud delivery first, then attempt the local safety copy.
- if(!/Android/i.test(navigator.userAgent)) queueMicrotask(()=>window.DDCloud?.queuePush?.());
+ if(!window.DD_SKIP_AUTO_PUSH) queueMicrotask(()=>window.DDCloud?.queuePush?.());
  try{
   localStorage.setItem(KEY,payload);
   localStorage.setItem('dd_last_local_save_v25',String(Date.now()));
@@ -3574,19 +3574,16 @@ function performEntrySave({deviceId,p,date,memo,operator='メイン',replaceEntr
    const dev=db.devices.find(x=>x.id===deviceId);if(dev)initDeviceGenerations(dev);savedEntryId=uid();db.entries.push({id:savedEntryId,deviceId,generationId:dev?.currentGenerationId||'',date,month:date.slice(0,7),year:date.slice(0,4),timestamp:ts,memo,operator:operator||'メイン',...result});
    recalculateDevice(deviceId);
   }
-  persist();clearEntryDraft();
+  window.DD_SKIP_AUTO_PUSH=true;
+  persist();
+  window.DD_SKIP_AUTO_PUSH=false;
+  clearEntryDraft();
   // Ver25.37: do not claim shared save until the cloud confirms it.
   toast(replaceEntryId?'端末へ変更内容を保存しました。共有保存を確認中…':'端末へ保存しました。共有保存を確認中…');
   setTimeout(async()=>{
    try{
-    let result;
-    if(/Android/i.test(navigator.userAgent)&&!replaceEntryId){
-     if(!window.DDCloud?.pushEntryById)throw new Error('緊急入力保存がまだ準備できていません');
-     result=await window.DDCloud.pushEntryById(savedEntryId);
-    }else{
-     if(!window.DDCloud?.syncNow)throw new Error('クラウド接続がまだ準備できていません');
-     result=await window.DDCloud.syncNow();
-    }
+    if(!window.DDCloud?.pushEntryById)throw new Error('1件保存がまだ準備できていません');
+    const result=await window.DDCloud.pushEntryById(savedEntryId);
     if(!result?.ok)throw new Error(result?.reason||'クラウド保存を確認できませんでした');
     toast(replaceEntryId?'変更を共有保存しました':'入力を共有保存しました');
    }catch(cloudError){
@@ -5429,7 +5426,7 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
 <script src="./backend-config.js?v=2515"></script>
-<script src="./app-cloud-bridge.js?v=2545"></script>
+<script src="./app-cloud-bridge.js?v=2551"></script>
 <script>
 // Ver23.0: GitHub Pagesで更新を確実に反映するため、旧Service Workerとキャッシュを解除します。
 if ('serviceWorker' in navigator) {
