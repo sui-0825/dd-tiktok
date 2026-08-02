@@ -1,8 +1,6 @@
-D&D TikTok Ver25.53 メール本人固定ログイン・テスト版
+# D&D TikTok Ver25.54 メールリンク戻り先修正版
 
-- メールアドレス＋メール確認コードで本人を固定
-- 名前は表示用
-- 同じメールで再ログイン可能
-- 初回は従来どおりオーナー承認待ち
-- 公開前にSupabase AuthenticationのEmail providerが有効であることを確認
-- 現在の本番アプリへ上書きせず、まずテスト用に使用してください
+- Supabaseのメールテンプレートは変更不要
+- メール内の「Sign in」を押すと `https://sui-0825.github.io/dd-tiktok/` へ戻る
+- URLの認証トークンをアプリが受け取り、同じメール本人としてログイン
+- Supabase Site URL / Redirect URLs は現在の設定のままでOK

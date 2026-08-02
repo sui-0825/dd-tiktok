@@ -2,7 +2,7 @@
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
-const TOKEN_KEY='dd_supabase_email_session_v1', LOCAL_USER_KEY='dd_tiktok_local_user_v1', DEVICE_ID_KEY='dd_device_registration_id_v1', DEVICE_ACCOUNT_KEY='dd_device_bound_user_v1', OWNER_UNLOCK_KEY='dd_owner_emergency_unlock_v1', OWNER_FAIL_KEY='dd_owner_pin_fail_v1', DIRTY_KEY='dd_cloud_dirty_v25', DIRTY_SEQ_KEY='dd_cloud_dirty_seq_v25';
+const TOKEN_KEY='dd_supabase_email_session_v2', LOCAL_USER_KEY='dd_tiktok_local_user_v1', DEVICE_ID_KEY='dd_device_registration_id_v1', DEVICE_ACCOUNT_KEY='dd_device_bound_user_v1', OWNER_UNLOCK_KEY='dd_owner_emergency_unlock_v1', OWNER_FAIL_KEY='dd_owner_pin_fail_v1', DIRTY_KEY='dd_cloud_dirty_v25', DIRTY_SEQ_KEY='dd_cloud_dirty_seq_v25';
 const diag=[];
 function addDiag(step,detail=''){const row={time:new Date().toISOString(),step:String(step),detail:String(detail||'')};diag.push(row);if(diag.length>30)diag.shift();console.log('[DD DIAG]',row);return row}
 const state={email:'',mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,retryTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,receiveTimer:null,receiveBusy:false,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true,dirty:false,dirtySeq:0,pushingSeq:0};
@@ -19,6 +19,7 @@ const emitAccess=()=>window.dispatchEvent(new CustomEvent('dd-access-state',{det
 function setStatus(status,mode=state.mode,error='',stage=state.stage){state.status=status;state.mode=mode;state.lastError=error||'';state.stage=stage||'';document.documentElement.dataset.storageMode=mode;document.documentElement.dataset.cloudStage=state.stage;emit()}
 const configured=()=>Boolean(cfg.enabled&&cfg.provider==='supabase'&&cfg.url&&cfg.anonKey&&cfg.workspaceId);
 const base=String(cfg.url||'').replace(/\/+$/,''), api=p=>`${base}${p}`;
+const APP_REDIRECT_URL=String(cfg.siteUrl||'https://sui-0825.github.io/dd-tiktok/');
 const authHeaders=()=>({apikey:cfg.anonKey,Authorization:`Bearer ${state.accessToken}`,'Content-Type':'application/json'});
 const getLocalUserName=()=>{try{return String(localStorage.getItem(LOCAL_USER_KEY)||'').trim()}catch(_){return ''}};
 
@@ -120,6 +121,31 @@ async function jsonFetch(url,options={}){
 function saveSession(d){try{localStorage.setItem(TOKEN_KEY,JSON.stringify({access_token:d.access_token,refresh_token:d.refresh_token||'',expires_at:d.expires_at||0,user:d.user}))}catch(_){}}
 function loadStoredSession(){try{const s=JSON.parse(localStorage.getItem(TOKEN_KEY)||'null');if(s?.access_token&&s?.user?.id){state.accessToken=s.access_token;state.user=s.user;return true}}catch(_){}return false}
 function clearSession(){try{localStorage.removeItem(TOKEN_KEY)}catch(_){}state.accessToken='';state.user=null}
+async function consumeEmailLinkSession(){
+ try{
+  const hash=new URLSearchParams(String(location.hash||'').replace(/^#/,''));
+  const query=new URLSearchParams(location.search||'');
+  const error=hash.get('error_description')||query.get('error_description')||hash.get('error')||query.get('error');
+  if(error)throw new Error(decodeURIComponent(error));
+  const accessToken=hash.get('access_token')||query.get('access_token');
+  const refreshToken=hash.get('refresh_token')||query.get('refresh_token')||'';
+  if(!accessToken)return false;
+  state.accessToken=accessToken;
+  const user=await jsonFetch(api('/auth/v1/user'),{headers:{apikey:cfg.anonKey,Authorization:`Bearer ${accessToken}`,'Content-Type':'application/json'}});
+  if(!user?.id||!user?.email)throw new Error('メール本人確認の情報を取得できませんでした');
+  state.user=user;state.email=String(user.email||'');
+  saveSession({access_token:accessToken,refresh_token:refreshToken,user});
+  rememberDeviceAccount();
+  history.replaceState(null,document.title,location.pathname+location.search.replace(/([?&])(access_token|refresh_token|expires_in|expires_at|token_type|type)=[^&]*/g,'').replace(/[?&]$/,'') );
+  addDiag('EMAIL_LINK_OK',state.email);
+  return true;
+ }catch(e){
+  addDiag('EMAIL_LINK_ERROR',e.message||e);
+  setStatus(`メール認証エラー: ${String(e.message||e).slice(0,80)}`,'error',e.message,'email-link-error');
+  try{history.replaceState(null,document.title,location.pathname)}catch(_){}
+  return false;
+ }
+}
 async function ensureAuth(){
  addDiag('AUTH_START',loadStoredSession()?'stored-session':'email-required');
  setStatus('認証を確認中…','cloud','','auth-check');
@@ -138,10 +164,10 @@ async function ensureAuth(){
 async function sendEmailCode(email){
  const clean=String(email||'').trim().toLowerCase();
  if(!/^\S+@\S+\.\S+$/.test(clean))throw new Error('正しいメールアドレスを入力してください');
- setStatus('確認コードを送信中…','cloud','','email-code-send');
- await jsonFetch(api('/auth/v1/otp'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:JSON.stringify({email:clean,create_user:true,data:{app:'dd-tiktok'}})});
+ setStatus('ログインメールを送信中…','cloud','','email-link-send');
+ await jsonFetch(api('/auth/v1/otp'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:JSON.stringify({email:clean,create_user:true,email_redirect_to:APP_REDIRECT_URL,data:{app:'dd-tiktok'}})});
  state.email=clean;try{sessionStorage.setItem('dd_login_email_v1',clean)}catch(_){}
- setStatus('メールの確認コードを入力してください','cloud','','email-code-sent');
+ setStatus('メールのログインリンクを押してください','cloud','','email-link-sent');
  return {ok:true,email:clean};
 }
 async function verifyEmailCode(email,token){
@@ -614,7 +640,7 @@ async function updateMember(userId,patch){
  if(status==='approved'){allowed.approved_at=new Date().toISOString();allowed.approved_by=state.user.id}
  await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&user_id=eq.${encodeURIComponent(userId)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(allowed)});return true
 }
-async function init(){if(!configured()){setStatus('設定不足・端末内保存','local','backend-config.jsの設定不足','config');return}try{setStatus('Supabaseへ接続中…','cloud','','connect');const user=await ensureAuth();if(!user)return;await verifyWorkspace();const name=getLocalUserName();if(name)await requestAccess(name);else{state.accessStatus='name_required';setStatus('名前を登録してください','cloud','','name-required');emitAccess()}}catch(e){console.error(e);setStatus(`接続失敗: ${String(e.message||'不明').slice(0,80)}`,'error',e.message,state.stage||'error')}}
+async function init(){if(!configured()){setStatus('設定不足・端末内保存','local','backend-config.jsの設定不足','config');return}try{setStatus('Supabaseへ接続中…','cloud','','connect');await consumeEmailLinkSession();const user=await ensureAuth();if(!user)return;await verifyWorkspace();const name=getLocalUserName();if(name)await requestAccess(name);else{state.accessStatus='name_required';setStatus('名前を登録してください','cloud','','name-required');emitAccess()}}catch(e){console.error(e);setStatus(`接続失敗: ${String(e.message||'不明').slice(0,80)}`,'error',e.message,state.stage||'error')}}
 
 async function recoverFromCloud(displayName,pin){
  const name=String(displayName||'').trim();
@@ -730,7 +756,7 @@ async function inspectConnection(){
   error:String(state.lastError||'')
  };
 }
-window.DDCloud={state,isConfigured:configured,init,sendEmailCode,verifyEmailCode,signOutEmail,pull,push,pushEntryById,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.53',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,sendEmailCode,verifyEmailCode,signOutEmail,pull,push,pushEntryById,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.54',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
