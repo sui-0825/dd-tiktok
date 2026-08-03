@@ -1,5 +1,6 @@
-D&D TikTok Ver25.77
-
-共有・入力・削除の中枢を、実機で双方向共有が確認できたVer25.63と同一の app-cloud-bridge.js へ戻したロールバック版。
-招待受付の見た目とカレンダーはVer25.71を維持。
-Ver25.75/25.76の軽量同期・強制受信専用処理は含みません。
+D&D TikTok Ver25.78
+- Ver25.63 stable entry sharing core
+- clears stale Ver25.76 receive-only/dirty locks at startup
+- input add/edit uses single-entry cloud save
+- annual entry deletion uses a cloud tombstone
+- no cloud recovery mode and no lightweight meta sync

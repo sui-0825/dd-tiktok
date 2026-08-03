@@ -1,10 +1,10 @@
-/* D&D❀TikTok Ver25.59 restore lock and exact backup commit */
+/* D&D❀TikTok Ver25.78 stable entry sharing repair */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
 const TOKEN_KEY='dd_supabase_anon_session_v2', LOCAL_USER_KEY='dd_tiktok_local_user_v1', DEVICE_ID_KEY='dd_device_registration_id_v1', DEVICE_ACCOUNT_KEY='dd_device_bound_user_v1', OWNER_UNLOCK_KEY='dd_owner_emergency_unlock_v1', OWNER_FAIL_KEY='dd_owner_pin_fail_v1', DIRTY_KEY='dd_cloud_dirty_v25', DIRTY_SEQ_KEY='dd_cloud_dirty_seq_v25';
 const diag=[];
-const ENTRY_CURSOR_KEY='dd_entry_records_cursor_v2';
+const ENTRY_CURSOR_KEY='dd_entry_records_cursor_v2', STALE_RECOVERY_KEY='dd_cloud_recovery_done_v2576';
 function addDiag(step,detail=''){const row={time:new Date().toISOString(),step:String(step),detail:String(detail||'')};diag.push(row);if(diag.length>30)diag.shift();console.log('[DD DIAG]',row);return row}
 const state={entryCursor:'',mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,retryTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,receiveTimer:null,receiveBusy:false,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true,dirty:false,dirtySeq:0,pushingSeq:0};
 const publicState=()=>({...state,syncTimer:undefined,retryTimer:undefined,presenceTimer:undefined,profileTimer:undefined,accessTimer:undefined,accessToken:undefined,user:state.user?{id:state.user.id}:null});
@@ -14,6 +14,15 @@ function markDirty(){state.dirty=true;state.dirtySeq=Math.max(Date.now(),state.d
 function clearDirty(seq){if(state.dirtySeq!==seq)return;state.dirty=false;try{localStorage.removeItem(DIRTY_KEY)}catch(_){}}
 function scheduleRetry(){clearTimeout(state.retryTimer);state.retryTimer=setTimeout(()=>{if(state.dirty&&navigator.onLine!==false)push().catch(()=>scheduleRetry())},5000)}
 loadDirtyState();
+function clearStaleRecoveryLocks(){
+ try{
+  localStorage.removeItem(STALE_RECOVERY_KEY);
+  localStorage.removeItem(DIRTY_KEY);
+  localStorage.removeItem(DIRTY_SEQ_KEY);
+ }catch(_){}
+ state.dirty=false;state.dirtySeq=0;state.recoveryProtected=false;
+ addDiag('STALE_LOCKS_CLEARED','25.76 receive-only/dirty locks removed');
+}
 
 const emit=()=>window.dispatchEvent(new CustomEvent('dd-cloud-status',{detail:publicState()}));
 const emitAccess=()=>window.dispatchEvent(new CustomEvent('dd-access-state',{detail:publicState()}));
@@ -509,6 +518,20 @@ async function pushEntryById(entryId){
  }
 }
 
+async function deleteEntryById(entryId,deviceId=''){
+ if(state.accessStatus!=='approved'||!state.workspaceId||!state.user)return {ok:false,reason:'not_ready'};
+ if(navigator.onLine===false)return {ok:false,reason:'offline'};
+ const id=String(entryId||'');if(!id)return {ok:false,reason:'entry_id_required'};
+ setStatus('削除を共有保存中…','cloud','','entry-delete-upload');
+ try{
+  const now=new Date().toISOString();
+  const body=JSON.stringify({workspace_id:state.workspaceId,entry_id:id,device_id:String(deviceId||'')||null,entry_data:null,device_data:null,deleted:true,updated_by:state.user.id,updated_at:now});
+  await rest('app_entry_records?on_conflict=workspace_id,entry_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body,timeoutMs:20000});
+  setStatus('削除を共有保存しました','cloud','','entry-delete-complete');
+  return {ok:true,entryId:id};
+ }catch(e){const message=e?.message||'削除共有に失敗しました';setStatus('削除共有に失敗','error',message,'entry-delete-error');return {ok:false,reason:message}}
+}
+
 async function pullEntryRecords(reason='timer'){
  if(state.receiveBusy||state.applying||state.accessStatus!=='approved'||!state.workspaceId||document.visibilityState==='hidden')return {ok:false,reason:'not_ready'};
  const cursor=state.entryCursor||(()=>{try{return localStorage.getItem(ENTRY_CURSOR_KEY)||'1970-01-01T00:00:00.000Z'}catch(_){return '1970-01-01T00:00:00.000Z'}})();
@@ -648,7 +671,7 @@ async function updateMember(userId,patch){
  if(status==='approved'){allowed.approved_at=new Date().toISOString();allowed.approved_by=state.user.id}
  await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&user_id=eq.${encodeURIComponent(userId)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(allowed)});return true
 }
-async function init(){if(!configured()){setStatus('設定不足・端末内保存','local','backend-config.jsの設定不足','config');return}try{setStatus('Supabaseへ接続中…','cloud','','connect');await ensureAuth();await verifyWorkspace();const name=getLocalUserName();if(name)await requestAccess(name);else{setStatus('名前を登録してください','cloud','','name-required');emitAccess()}}catch(e){console.error(e);setStatus(`接続失敗: ${String(e.message||'不明').slice(0,80)}`,'error',e.message,state.stage||'error')}}
+async function init(){clearStaleRecoveryLocks();if(!configured()){setStatus('設定不足・端末内保存','local','backend-config.jsの設定不足','config');return}try{setStatus('Supabaseへ接続中…','cloud','','connect');await ensureAuth();await verifyWorkspace();const name=getLocalUserName();if(name)await requestAccess(name);else{setStatus('名前を登録してください','cloud','','name-required');emitAccess()}}catch(e){console.error(e);setStatus(`接続失敗: ${String(e.message||'不明').slice(0,80)}`,'error',e.message,state.stage||'error')}}
 
 async function recoverFromCloud(displayName,pin){
  const name=String(displayName||'').trim();
@@ -764,7 +787,7 @@ async function inspectConnection(){
   error:String(state.lastError||'')
  };
 }
-window.DDCloud={state,isConfigured:configured,init,pull,push,pushEntryById,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.59',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,pull,push,pushEntryById,deleteEntryById,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.78',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){return orig.apply(this,arguments)};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
