@@ -502,10 +502,15 @@ async function pushEntryById(entryId){
   setStatus('入力を共有保存しました','cloud','','entry-record-complete');
   return {ok:true,entryId:id,updatedAt:state.entryCursor};
  }catch(e){
-  markDirty();scheduleRetry();
-  const message=e?.message||'入力1件の共有保存に失敗しました';
-  setStatus('入力の共有保存を再試行中','error',message,'entry-record-error');
-  return {ok:false,reason:message};
+  const firstMessage=e?.message||'入力1件の共有保存に失敗しました';
+  addDiag('ENTRY_RECORD_FALLBACK',firstMessage);
+  markDirty();
+  setStatus('親データ方式で共有保存中…','cloud',firstMessage,'entry-fallback');
+  try{
+   const fallback=await push();
+   if(fallback?.ok){setStatus('入力を共有保存しました','cloud','','entry-fallback-complete');return {ok:true,entryId:id,fallback:'snapshot',revision:fallback.revision}}
+   const reason=fallback?.reason||firstMessage;scheduleRetry();setStatus('共有保存を再試行中','error',reason,'entry-fallback-error');return {ok:false,reason};
+  }catch(fallbackError){const reason=fallbackError?.message||firstMessage;scheduleRetry();setStatus('共有保存を再試行中','error',reason,'entry-fallback-error');return {ok:false,reason}}
  }
 }
 
@@ -523,7 +528,17 @@ async function pushEntryDelete(entryId,deviceId=''){
   if(saved?.updated_at){state.entryCursor=String(saved.updated_at);try{localStorage.setItem(ENTRY_CURSOR_KEY,state.entryCursor)}catch(_){}}
   setStatus('削除を共有保存しました','cloud','','entry-delete-complete');
   return {ok:true,entryId:id,updatedAt:String(saved?.updated_at||now)};
- }catch(e){const message=e?.message||'削除の共有保存に失敗しました';setStatus('削除の共有保存に失敗','error',message,'entry-delete-error');return {ok:false,reason:message}}
+ }catch(e){
+  const firstMessage=e?.message||'削除の共有保存に失敗しました';
+  addDiag('ENTRY_DELETE_FALLBACK',firstMessage);
+  markDirty();
+  setStatus('親データ方式で削除を共有中…','cloud',firstMessage,'entry-delete-fallback');
+  try{
+   const fallback=await push();
+   if(fallback?.ok){setStatus('削除を共有保存しました','cloud','','entry-delete-fallback-complete');return {ok:true,entryId:id,fallback:'snapshot',revision:fallback.revision}}
+   const reason=fallback?.reason||firstMessage;scheduleRetry();setStatus('削除共有を再試行中','error',reason,'entry-delete-fallback-error');return {ok:false,reason};
+  }catch(fallbackError){const reason=fallbackError?.message||firstMessage;scheduleRetry();setStatus('削除共有を再試行中','error',reason,'entry-delete-fallback-error');return {ok:false,reason}}
+ }
 }
 
 async function pullEntryRecords(reason='timer'){

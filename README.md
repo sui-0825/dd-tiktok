@@ -1,3 +1,1 @@
-D&D❀TikTok Ver25.79
-
-数字の入力・編集・削除を1件同期に限定。3秒ごとの古い親データ受信を止め、直前の数字が戻る問題を防止。
+D&D TikTok Ver25.80 entry share fallback
