@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.66-safe-duplicate-organizer">
+<meta name="dd-build" content="25.67-device-owner-integration">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -5310,30 +5310,43 @@ function duplicateGroupKey(group){return normalizeMemberName(group?.[0]?.display
 function renderDuplicateGroups(groups,currentRole){
  if(currentRole!=='owner')return '<div class="empty">重複整理はオーナーのみ行えます</div>';
  return groups.map((group,index)=>{
-  const key=duplicateGroupKey(group);const suggested=group[0]?.user_id||'';
-  const choices=group.map((m,i)=>`<label class="duplicate-choice ${i===0?'recommended':''}"><div><input type="radio" name="dup_${index}" value="${esc(m.user_id)}" ${i===0?'checked':''}><span class="duplicate-choice-title">${esc(m.display_name)} ${m.is_self?'（この端末）':''}</span></div><div class="duplicate-choice-meta">${m.role==='owner'?'👑 オーナー':m.role==='admin'?'🛎️ 管理者':'👤 一般'} ／ ${accessLabel(m.status)} ／ ID末尾 ${esc(String(m.user_id||'').slice(-8))}<br>最終接続：${esc(formatMemberLastSeen(m.last_seen_at))}${i===0?' ／ 推奨：保護・権限・接続状況を優先':''}</div></label>`).join('');
-  return `<section class="duplicate-group"><h3>${esc(group[0]?.display_name||'名前なし')}：${group.length}件</h3><div class="duplicate-group-help">残す登録を1件選んでください。選ばなかった登録だけを削除します。入力・端末・年間データは削除しません。</div>${choices}<button class="duplicate-organize-btn" onclick="adminOrganizeDuplicate('${esc(key)}',${index})">選んだ1件を残して整理</button><div class="duplicate-safety">安全装置：この端末の登録・オーナー登録は、残す側に選ばれていない場合でも自動削除しません。</div></section>`
+  const key=duplicateGroupKey(group);const self=group.find(m=>m.is_self);const owner=group.find(m=>m.role==='owner');
+  const recommendedId=String(self?.user_id||owner?.user_id||group[0]?.user_id||'');
+  const choices=group.map(m=>{const chosen=String(m.user_id)===recommendedId;return `<label class="duplicate-choice ${chosen?'recommended':''}"><div><input type="radio" name="dup_${index}" value="${esc(m.user_id)}" ${chosen?'checked':''}><span class="duplicate-choice-title">${esc(m.display_name)} ${m.is_self?'（この端末）':''}</span></div><div class="duplicate-choice-meta">${m.role==='owner'?'👑 オーナー':m.role==='admin'?'🛎️ 管理者':'👤 一般'} ／ ${accessLabel(m.status)} ／ ID末尾 ${esc(String(m.user_id||'').slice(-8))}<br>最終接続：${esc(formatMemberLastSeen(m.last_seen_at))}${chosen?' ／ 推奨：この端末を正式登録として残します':''}</div></label>`}).join('');
+  const help=self&&owner&&String(self.user_id)!==String(owner.user_id)
+   ?'この端末の仮登録へオーナー権限を安全に引き継ぎ、古いオーナー登録と残りの重複だけを整理します。入力・端末・年間データには触れません。'
+   :'残す登録を1件選んでください。選ばなかった登録だけを削除します。入力・端末・年間データは削除しません。';
+  const label=self&&owner&&String(self.user_id)!==String(owner.user_id)?'この端末へ統合して整理':'選んだ1件を残して整理';
+  return `<section class="duplicate-group"><h3>${esc(group[0]?.display_name||'名前なし')}：${group.length}件</h3><div class="duplicate-group-help">${help}</div>${choices}<button class="duplicate-organize-btn" onclick="adminOrganizeDuplicate('${esc(key)}',${index})">${label}</button><div class="duplicate-safety">安全処理：この端末を残す場合は、先に承認・オーナー権限を復旧してから古い登録を整理します。データ本体は削除しません。</div></section>`
  }).join('')
 }
 async function adminOrganizeDuplicate(groupKey,index){
  const groups=buildDuplicateGroups(ddAdminRowsCache);const group=groups.find(g=>duplicateGroupKey(g)===groupKey)||groups[index];
  if(!group?.length){toast('重複候補を読み直してください');return}
- const picked=document.querySelector(`input[name="dup_${index}"]:checked`);const keepId=String(picked?.value||'');
+ const picked=document.querySelector(`input[name="dup_${index}"]:checked`);let keepId=String(picked?.value||'');
+ const self=group.find(m=>m.is_self);const oldOwner=group.find(m=>m.role==='owner'&&!m.is_self);
+ // 匿名ログインは別IDへ付け替えられないため、この端末を正式登録として残す。
+ if(self&&oldOwner)keepId=String(self.user_id);
  const keep=group.find(m=>String(m.user_id)===keepId);if(!keep){toast('残す登録を選んでください');return}
- const blocked=group.filter(m=>String(m.user_id)!==keepId&&(m.is_self||m.role==='owner'));
- if(blocked.length){alert(`安全のため整理を中止しました。
-
-「${blocked.map(x=>x.display_name).join('、')}」には、この端末またはオーナーの保護登録が含まれています。保護登録を残す側に選んでください。`);return}
  const remove=group.filter(m=>String(m.user_id)!==keepId);
  if(!remove.length){toast('削除対象がありません');return}
- if(!confirm(`「${keep.display_name}」の登録（ID末尾 ${String(keep.user_id).slice(-8)}）を残し、ほかの${remove.length}件を削除しますか？
-
-入力・端末・年間データは削除しません。`))return;
+ const message=self&&oldOwner
+  ?`「${keep.display_name}（この端末）」を正式なオーナー登録へ統合し、古い登録${remove.length}件を整理しますか？\n\n入力・端末・年間データは削除しません。`
+  :`「${keep.display_name}」の登録（ID末尾 ${String(keep.user_id).slice(-8)}）を残し、ほかの${remove.length}件を削除しますか？\n\n入力・端末・年間データは削除しません。`;
+ if(!confirm(message))return;
  try{
   const pin=sessionStorage.getItem('dd_admin_pin_session')||'';if(!pin)throw new Error('管理者ページを開き直して暗証番号を入力してください');
-  for(const m of remove)await window.DDCloud.deleteMemberByPin(pin,m.user_id);
-  toast(`${keep.display_name}さんの登録を1件に整理しました`);ddAdminLastHash='';await renderAdminPage();
- }catch(e){toast(e.message||'重複を整理できませんでした');await renderAdminPage()}
+  if(self&&oldOwner){
+   // 先にこの端末を承認済みオーナーへ復旧。成功前には何も削除しない。
+   await window.DDCloud.restoreCurrentOwnerByPin(pin);
+  }
+  for(const m of remove){
+   // 古いオーナーは一般へ戻してから削除し、唯一のオーナー保護に抵触しないようにする。
+   if(m.role==='owner')await window.DDCloud.updateMemberByPin(pin,m.user_id,{role:'member',status:'approved'});
+   await window.DDCloud.deleteMemberByPin(pin,m.user_id);
+  }
+  toast(`${keep.display_name}さんをこの端末の正式登録へ統合しました`);ddAdminLastHash='';await renderAdminPage();
+ }catch(e){toast(e.message||'重複を統合できませんでした');await renderAdminPage()}
 }
 async function renderAdminPage(silent=false){
  const root=document.getElementById('adminMemberList');if(!root)return;
@@ -5515,7 +5528,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.66';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.67';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
