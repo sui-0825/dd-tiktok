@@ -1,7 +1,6 @@
-D&D❀TikTok Ver25.63 source-fixed share build
+D&D❀TikTok Ver25.64 safe member cleanup
 
-- Built only from the files uploaded by the user on 2026-08-03.
-- Original UI and app logic preserved.
-- Supabase cloud sharing enabled.
-- Startup is pinned to the original D&D❀TikTok home screen.
-- Existing JSON backup is not bundled and is not modified.
+- Ver25.63の共有・保存処理は変更していません。
+- 管理者ページで同一名の重複ログイン候補を表示します。
+- 自動削除はしません。ID末尾・最終接続を確認して、不要な登録だけ手動削除します。
+- 入力履歴、年間データ、端末データは削除対象外です。
