@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.59 restore lock and exact backup commit */
+/* D&D❀TikTok Ver25.85 delta-only startup; no automatic parent snapshot */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -17,7 +17,7 @@ loadDirtyState();
 
 const emit=()=>window.dispatchEvent(new CustomEvent('dd-cloud-status',{detail:publicState()}));
 const emitAccess=()=>window.dispatchEvent(new CustomEvent('dd-access-state',{detail:publicState()}));
-function setStatus(status,mode=state.mode,error='',stage=state.stage){state.status=status;state.mode=mode;state.lastError=error||'';state.stage=stage||'';document.documentElement.dataset.storageMode=mode;document.documentElement.dataset.cloudStage=state.stage;emit()}
+function setStatus(status,mode=state.mode,error='',stage=state.stage){state.status=status;state.mode=mode;if(error)state.lastError=String(error);state.stage=stage||'';document.documentElement.dataset.storageMode=mode;document.documentElement.dataset.cloudStage=state.stage;emit()}
 const configured=()=>Boolean(cfg.enabled&&cfg.provider==='supabase'&&cfg.url&&cfg.anonKey&&cfg.workspaceId);
 const base=String(cfg.url||'').replace(/\/+$/,''), api=p=>`${base}${p}`;
 const authHeaders=()=>({apikey:cfg.anonKey,Authorization:`Bearer ${state.accessToken}`,'Content-Type':'application/json'});
@@ -184,7 +184,10 @@ async function ownerEmergencyUnlock(pin){
   state.accessStatus='approved';
   emitAccess();
   setStatus('オーナーとして接続','cloud','','owner-unlocked');
-  try{await pull()}catch(e){console.warn(e)}
+  state.recoveryProtected=false;
+  state.dirty=false;state.dirtySeq=0;
+  try{localStorage.removeItem(DIRTY_KEY);localStorage.removeItem(DIRTY_SEQ_KEY)}catch(_){}
+  setStatus('差分共有へ接続済み','cloud','','delta-ready');
   startPresence();
   refreshUI();
   return true;
@@ -217,8 +220,10 @@ function startAccessPolling(){
    const row=await getMembership();
    if(state.accessStatus==='approved'){
     stopAccessPolling();
-    setStatus('チェックイン承認済み','cloud','','approved');
-    await pull();
+    state.recoveryProtected=false;
+    state.dirty=false;state.dirtySeq=0;
+    try{localStorage.removeItem(DIRTY_KEY);localStorage.removeItem(DIRTY_SEQ_KEY)}catch(_){}
+    setStatus('チェックイン承認済み・差分共有接続','cloud','','delta-ready');
     startPresence();startAutomaticReceive();refreshUI();
    }else if(state.accessStatus!==before){emitAccess()}
   }catch(e){console.warn('access polling:',e)}
@@ -265,14 +270,10 @@ async function requestAccess(displayName){
  if(state.role==='owner')await repairOwnerMembershipSafe();
  if(state.accessStatus==='approved'){
   stopAccessPolling();
-  setStatus(state.role==='owner'?'管理者として接続':'承認済み','cloud','','approved');
-  const pulled=await pull();
-  if(state.role==='owner'&&!pulled?.found&&hasMeaningfulLocalData()){
-   state.recoveryProtected=false;
-   setStatus('初回クラウド保存中…','cloud','','first-seed');
-   const seeded=await push();
-   if(!seeded?.ok)throw new Error('初回クラウド保存に失敗しました');
-  }
+  state.recoveryProtected=false;
+  state.dirty=false;state.dirtySeq=0;
+  try{localStorage.removeItem(DIRTY_KEY);localStorage.removeItem(DIRTY_SEQ_KEY)}catch(_){}
+  setStatus(state.role==='owner'?'管理者として差分共有へ接続':'承認済み・差分共有へ接続','cloud','','delta-ready');
   startPresence();startAutomaticReceive();refreshUI();
  }else{
   setStatus(state.accessStatus==='pending'?'管理者の承認待ちです':state.accessStatus==='suspended'?'利用停止中です':'利用できません','cloud','',state.accessStatus);
@@ -746,7 +747,7 @@ async function inspectConnection(){
   error:String(state.lastError||'')
  };
 }
-window.DDCloud={state,isConfigured:configured,init,pull,push,pushEntryById,deleteEntryById,pushMeta,pullMeta,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectAuthIdentity,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.59',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,pull,push,pushEntryById,deleteEntryById,pushMeta,pullMeta,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectAuthIdentity,inspectConnection,inspectTrackedEntry,async syncNow(){const a=await pushMeta();return a},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.59',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);if(!window.DD_SKIP_AUTO_PUSH&&!state.applying){clearTimeout(state.metaTimer);state.metaTimer=setTimeout(()=>pushMeta().catch(console.warn),500)}return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
