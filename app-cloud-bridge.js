@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.41 recovery protection release after confirmed sync */
+/* D&D❀TikTok Ver25.59 restore lock and exact backup commit */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -404,6 +404,48 @@ async function push(){
   markDirty();setStatus(`停止位置：${state.status}`,'error',e.message,'diag-error');scheduleRetry();throw e
  }
 }
+async function restoreBackupSnapshot(payload){
+ if(!payload||typeof payload!=='object'||!Array.isArray(payload.devices)||!Array.isArray(payload.entries))throw new Error('復元データの形式が正しくありません');
+ if(!state.user)await ensureAuth();
+ if(!state.workspaceId)await verifyWorkspace();
+ if(state.accessStatus!=='approved')throw new Error('クラウド復元には承認済み権限が必要です');
+ // 進行中の自動受信が復元内容へ古いクラウド値を戻さないよう、一度完全に止める。
+ stopAutomaticReceive();
+ const waitUntil=Date.now()+25000;
+ while(state.receiveBusy&&Date.now()<waitUntil)await new Promise(r=>setTimeout(r,120));
+ if(state.receiveBusy)throw new Error('別端末データの受信中です。数秒後にもう一度復元してください');
+ state.applying=true;
+ setStatus('バックアップをクラウドへ確定中…','cloud','','restore-commit');
+ try{
+  const clean=typeof structuredClone==='function'?structuredClone(payload):JSON.parse(JSON.stringify(payload));
+  clean.currentUser='';
+  if(typeof window.recalculateStoredEntries==='function')window.recalculateStoredEntries(clean);
+  const latestRows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision&limit=1`,{timeoutMs:45000});
+  const latest=Array.isArray(latestRows)?latestRows[0]:null;
+  const next=Math.max(1,Number(latest?.revision||0)+1,Number(state.revision||0)+1);
+  const committedAt=new Date().toISOString();
+  const rows=await rest('app_snapshots?on_conflict=workspace_id',{
+   method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},
+   body:JSON.stringify({workspace_id:state.workspaceId,revision:next,payload:clean,updated_by:state.user.id,updated_at:committedAt}),timeoutMs:45000
+  });
+  state.revision=Number(Array.isArray(rows)&&rows[0]?.revision||next);
+  // 復元以前の1件同期ログを再読込すると、古い数字が復活・上書きされるためカーソルを復元確定時刻へ進める。
+  state.entryCursor=String(Array.isArray(rows)&&rows[0]?.updated_at||committedAt);
+  state.dirty=false;state.dirtySeq=0;state.recoveryProtected=false;
+  try{localStorage.removeItem(DIRTY_KEY);localStorage.removeItem(DIRTY_SEQ_KEY);localStorage.setItem(ENTRY_CURSOR_KEY,state.entryCursor)}catch(_){}
+  window.db=clean;
+  try{const saved=typeof window.compactDBForStorage==='function'?window.compactDBForStorage(window.db):window.db;localStorage.setItem(window.KEY||'dd_tiktok_app_v14_production',JSON.stringify(saved))}catch(_){}
+  setStatus('バックアップ復元を確定しました','cloud','','restore-complete');
+  refreshUI();
+  return {ok:true,revision:state.revision,updatedAt:state.entryCursor};
+ }catch(e){
+  markDirty();setStatus('復元データのクラウド確定に失敗','error',e.message,'restore-error');throw e;
+ }finally{
+  state.applying=false;
+  if(document.visibilityState!=='hidden'&&state.accessStatus==='approved')startAutomaticReceive();
+ }
+}
+
 async function seedCompanyData(payload){
  if(!payload||typeof payload!=='object'||!Array.isArray(payload.devices)||!Array.isArray(payload.entries))throw new Error('親データの形式が正しくありません');
  if(!state.user)await ensureAuth();
@@ -722,8 +764,8 @@ async function inspectConnection(){
   error:String(state.lastError||'')
  };
 }
-window.DDCloud={state,isConfigured:configured,init,pull,push,pushEntryById,pullEntryRecords,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.58',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
-function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);queuePush();return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
+window.DDCloud={state,isConfigured:configured,init,pull,push,pushEntryById,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.59',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){return orig.apply(this,arguments)};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
 window.addEventListener('focus',()=>{if(state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('focus')}});
