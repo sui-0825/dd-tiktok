@@ -27,5 +27,6 @@
   "display_override": [
     "standalone",
     "minimal-ui"
-  ]
+  ],
+  "version": "25.66"
 }
