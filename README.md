@@ -1,7 +1,3 @@
-D&D❀TikTok Ver25.63 source-fixed share build
+D&D❀TikTok Ver25.79
 
-- Built only from the files uploaded by the user on 2026-08-03.
-- Original UI and app logic preserved.
-- Supabase cloud sharing enabled.
-- Startup is pinned to the original D&D❀TikTok home screen.
-- Existing JSON backup is not bundled and is not modified.
+数字の入力・編集・削除を1件同期に限定。3秒ごとの古い親データ受信を止め、直前の数字が戻る問題を防止。

@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.63-source-fixed-share">
+<meta name="dd-build" content="25.79-entry-share-no-rollback">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -4204,7 +4204,12 @@ function saveAnnualEditor(){
  }catch(e){const err=document.getElementById('annualEditError');err.textContent=e.message||'入力形式を確認してください';err.classList.add('show')}
 }
 function deleteAnnualEditor(){
- if(!annualEditState?.entry||!confirm('この入力を削除しますか？'))return;const {deviceId,entry,date}=annualEditState;db.entries=db.entries.filter(x=>x.id!==entry.id);annualLastSavedCell=`${date}|${deviceId}`;recalcDevice(deviceId);persist();closeAnnualEditor();renderAnnual();renderHome();toast('入力を削除し、後続だけ再計算しました')
+ if(!annualEditState?.entry||!confirm('この入力を削除しますか？'))return;
+ const {deviceId,entry,date}=annualEditState,deletedId=entry.id;
+ db.entries=db.entries.filter(x=>x.id!==deletedId);annualLastSavedCell=`${date}|${deviceId}`;recalcDevice(deviceId);
+ window.DD_SKIP_AUTO_PUSH=true;persist();window.DD_SKIP_AUTO_PUSH=false;
+ closeAnnualEditor();renderAnnual();renderHome();toast('端末から削除しました。共有保存を確認中…');
+ setTimeout(async()=>{const r=await window.DDCloud?.pushEntryDelete?.(deletedId,deviceId);toast(r?.ok?'削除を共有保存しました':'削除の共有保存に失敗しました。数字は戻しません')},0)
 }
 
 function renderAnnual(){
@@ -5469,7 +5474,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.63';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.79';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
