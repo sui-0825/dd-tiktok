@@ -1,4 +1,4 @@
-D&D❀TikTok Ver25.64 safe member cleanup
+D&D❀TikTok Ver25.65 safe member cleanup
 
 - Ver25.63の共有・保存処理は変更していません。
 - 管理者ページで同一名の重複ログイン候補を表示します。

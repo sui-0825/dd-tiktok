@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.64-safe-member-cleanup">
+<meta name="dd-build" content="25.65-gear-fixed">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -5333,7 +5333,7 @@ async function renderAdminPage(silent=false){
   document.getElementById('adminPendingCount').textContent=rows.filter(x=>x.status==='pending').length;
   document.getElementById('adminApprovedCount').textContent=rows.filter(x=>x.status==='approved').length;
   document.getElementById('adminSuspendedCount').textContent=rows.filter(x=>x.status==='suspended'||x.status==='rejected').length;
-  root.innerHTML=displayRows.length?displayRows.map(m=>`<div class="admin-member ${m.status==='pending'?'pending-card':''} ${m.is_self?'self-card':''} ${duplicateIds.has(m.user_id)?'duplicate-card':''}"><div class="admin-member-head"><div><b>${esc(m.display_name)}</b><div class="admin-badges"><span class="admin-badge ${m.status}">${accessLabel(m.status)}</span><span class="admin-badge">${m.role==='owner'?'👑 オーナー':m.role==='admin'?'🛎️ 管理者':'👤 一般'}</span>${m.is_self?'<span class="admin-badge">あなた</span>':''}${duplicateIds.has(m.user_id)?'<span class="admin-badge duplicate">重複候補</span>':''}</div><div class="admin-member-note">ID末尾: ${esc(String(m.user_id||'').slice(-8))} ／ 最終接続: ${esc(formatMemberLastSeen(m.last_seen_at))}</div></div></div>${adminMemberActions(m,s.role)}</div>`).join(''):'<div class="empty">${ddAdminDuplicatesOnly?'重複候補はありません':'利用者はいません'}</div>';
+  root.innerHTML=displayRows.length?displayRows.map(m=>`<div class="admin-member ${m.status==='pending'?'pending-card':''} ${m.is_self?'self-card':''} ${duplicateIds.has(m.user_id)?'duplicate-card':''}"><div class="admin-member-head"><div><b>${esc(m.display_name)}</b><div class="admin-badges"><span class="admin-badge ${m.status}">${accessLabel(m.status)}</span><span class="admin-badge">${m.role==='owner'?'👑 オーナー':m.role==='admin'?'🛎️ 管理者':'👤 一般'}</span>${m.is_self?'<span class="admin-badge">あなた</span>':''}${duplicateIds.has(m.user_id)?'<span class="admin-badge duplicate">重複候補</span>':''}</div><div class="admin-member-note">ID末尾: ${esc(String(m.user_id||'').slice(-8))} ／ 最終接続: ${esc(formatMemberLastSeen(m.last_seen_at))}</div></div></div>${adminMemberActions(m,s.role)}</div>`).join(''):`<div class="empty">${ddAdminDuplicatesOnly?'重複候補はありません':'利用者はいません'}</div>`;
  }catch(e){if(!silent)root.innerHTML=`<div class="empty">${esc(e.message||'読み込めませんでした')}</div>`}
 }
 let ddAdminRefreshTimer=null;
