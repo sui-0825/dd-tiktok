@@ -1,6 +1,7 @@
-# D&D❀TikTok Ver26.03 Royal Bank
+D&D❀TikTok Ver25.63 source-fixed share build
 
-- Ver25の紺×金「収支銀行」表示を基準にした新規安定版
-- ローカル保存優先
-- 旧JSONバックアップ読み込み対応
-- 招待・承認・掲示板・メモ・複雑なクラウド同期なし
+- Built only from the files uploaded by the user on 2026-08-03.
+- Original UI and app logic preserved.
+- Supabase cloud sharing enabled.
+- Startup is pinned to the original D&D❀TikTok home screen.
+- Existing JSON backup is not bundled and is not modified.
