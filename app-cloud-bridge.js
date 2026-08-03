@@ -6,7 +6,7 @@ const TOKEN_KEY='dd_supabase_anon_session_v2', LOCAL_USER_KEY='dd_tiktok_local_u
 const diag=[];
 const ENTRY_CURSOR_KEY='dd_entry_records_cursor_v2';
 function addDiag(step,detail=''){const row={time:new Date().toISOString(),step:String(step),detail:String(detail||'')};diag.push(row);if(diag.length>30)diag.shift();console.log('[DD DIAG]',row);return row}
-const state={entryCursor:'',mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,retryTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,receiveTimer:null,receiveBusy:false,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true,dirty:false,dirtySeq:0,pushingSeq:0};
+const state={entryCursor:'',mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,retryTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,receiveTimer:null,receiveBusy:false,pushBusy:false,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true,dirty:false,dirtySeq:0,pushingSeq:0};
 const publicState=()=>({...state,syncTimer:undefined,retryTimer:undefined,presenceTimer:undefined,profileTimer:undefined,accessTimer:undefined,accessToken:undefined,user:state.user?{id:state.user.id}:null});
 
 function loadDirtyState(){try{state.dirty=localStorage.getItem(DIRTY_KEY)==='1';state.dirtySeq=Number(localStorage.getItem(DIRTY_SEQ_KEY)||0)}catch(_){state.dirty=false;state.dirtySeq=0}}
@@ -78,7 +78,7 @@ async function reconcileDirtyStateWithRemote(){
  addDiag('DIRTY_REPAIRED',`revision=${state.revision}`);
  return {cleared:true,revision:state.revision,payload:row.payload};
 }
-function recordClock(x){return Math.max(Number(x?.editedAt||0),Number(x?.updatedAt||0),Number(x?.timestamp||0),Number(x?.createdAt||0))}
+function recordClock(x){return Math.max(Number(x?.editedAt||0),Number(x?.updatedAt||0),Number(x?.cancelledAt||0),Number(x?.timestamp||0),Number(x?.createdAt||0))}
 function mergeRecordArrays(remote=[],local=[]){
  const map=new Map();
  for(const row of [...remote,...local]){
@@ -354,7 +354,14 @@ async function confirmRecoveryProtectionCanRelease(){
  }
 }
 async function push(){
+ if(state.pushBusy){markDirty();scheduleRetry();return {ok:false,reason:'push_busy'}}
+ state.pushBusy=true;
  addDiag('1/6 PUSH_START',`dirty=${state.dirty} access=${state.accessStatus} role=${state.role} protected=${state.recoveryProtected}`);
+ try{
+  // Do not race a remote receive. Keep the Android local changes protected until receive finishes.
+  const waitUntil=Date.now()+20000;
+  while(state.receiveBusy&&Date.now()<waitUntil)await new Promise(r=>setTimeout(r,150));
+  if(state.receiveBusy){markDirty();scheduleRetry();return {ok:false,reason:'receive_busy'}}
  if(state.recoveryProtected){
   const released=await confirmRecoveryProtectionCanRelease();
   if(!released){addDiag('STOP','recovery_protected');return {ok:false,reason:'recovery_protected'}}
@@ -370,7 +377,7 @@ async function push(){
   addDiag('1/6 PAYLOAD_READY',`${localBytes} bytes / devices=${snapshot.devices?.length||0} entries=${snapshot.entries?.length||0}`);
   setStatus(`診断 2/6：親データ確認中（${(localBytes/1024/1024).toFixed(1)}MB）`,'cloud','','diag-read-latest');
   addDiag('2/6 READ_REMOTE_START',state.workspaceId);
-  const latestRows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,payload&limit=1`,{timeoutMs:45000});
+  const latestRows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,payload&limit=1`,{timeoutMs:120000});
   addDiag('2/6 READ_REMOTE_OK',`rows=${Array.isArray(latestRows)?latestRows.length:0}`);
   const latest=Array.isArray(latestRows)?latestRows[0]:null;
   setStatus('診断 3/6：変更を統合中','cloud','','diag-merge');
@@ -386,7 +393,7 @@ async function push(){
   addDiag('3/6 MERGE_OK',`revision=${state.revision}->${next} body=${bytes} bytes`);
   setStatus(`診断 4/6：クラウドへ送信中（${(bytes/1024/1024).toFixed(1)}MB）`,'cloud','','diag-upload');
   addDiag('4/6 UPLOAD_START',`${bytes} bytes`);
-  const rows=await rest('app_snapshots?on_conflict=workspace_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body,timeoutMs:45000});
+  const rows=await rest('app_snapshots?on_conflict=workspace_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body,timeoutMs:120000});
   addDiag('4/6 UPLOAD_OK',`rows=${Array.isArray(rows)?rows.length:0}`);
   state.revision=Number(Array.isArray(rows)&&rows[0]?.revision||next);
   setStatus('診断 5/6：利用者情報を更新中','cloud','','diag-profile');
@@ -403,6 +410,7 @@ async function push(){
   addDiag('DIAG_ERROR',`${state.stage}: ${e?.message||e}`);
   markDirty();setStatus(`停止位置：${state.status}`,'error',e.message,'diag-error');scheduleRetry();throw e
  }
+ }finally{state.pushBusy=false}
 }
 async function restoreBackupSnapshot(payload){
  if(!payload||typeof payload!=='object'||!Array.isArray(payload.devices)||!Array.isArray(payload.entries))throw new Error('復元データの形式が正しくありません');
@@ -545,7 +553,16 @@ async function pullEntryRecords(reason='timer'){
  finally{state.receiveBusy=false}
 }
 
-function queuePush(mark=true){if(mark)markDirty();if(state.recoveryProtected||!state.user||state.accessStatus!=='approved'||state.applying)return;clearTimeout(state.syncTimer);state.syncTimer=setTimeout(()=>push().catch(()=>scheduleRetry()),700)}
+function queuePush(mark=true){
+ if(mark)markDirty();
+ clearTimeout(state.syncTimer);
+ // Ver25.73: full-data changes (device additions / invite summaries) must not be silently dropped.
+ // Even during recovery protection, schedule push(); push itself safely verifies the cloud revision first.
+ state.syncTimer=setTimeout(()=>{
+  if(!state.user||state.accessStatus!=='approved'||state.applying){scheduleRetry();return}
+  push().catch(()=>scheduleRetry());
+ },900)
+}
 
 async function checkForRemoteUpdates(reason='timer'){
  if(state.receiveBusy||state.applying||state.accessStatus!=='approved'||!state.workspaceId||document.visibilityState==='hidden')return {ok:false,reason:'not_ready'};
@@ -764,7 +781,7 @@ async function inspectConnection(){
   error:String(state.lastError||'')
  };
 }
-window.DDCloud={state,isConfigured:configured,init,pull,push,pushEntryById,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.59',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,pull,push,pushEntryById,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.73',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){return orig.apply(this,arguments)};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
