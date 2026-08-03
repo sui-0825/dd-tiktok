@@ -12,7 +12,7 @@ const publicState=()=>({...state,syncTimer:undefined,retryTimer:undefined,presen
 function loadDirtyState(){try{state.dirty=localStorage.getItem(DIRTY_KEY)==='1';state.dirtySeq=Number(localStorage.getItem(DIRTY_SEQ_KEY)||0)}catch(_){state.dirty=false;state.dirtySeq=0}}
 function markDirty(){state.dirty=true;state.dirtySeq=Math.max(Date.now(),state.dirtySeq+1);try{localStorage.setItem(DIRTY_KEY,'1');localStorage.setItem(DIRTY_SEQ_KEY,String(state.dirtySeq))}catch(_){}}
 function clearDirty(seq){if(state.dirtySeq!==seq)return;state.dirty=false;try{localStorage.removeItem(DIRTY_KEY)}catch(_){}}
-function scheduleRetry(){clearTimeout(state.retryTimer);state.retryTimer=setTimeout(()=>{if(state.dirty&&navigator.onLine!==false)push().catch(()=>scheduleRetry())},5000)}
+function scheduleRetry(){clearTimeout(state.retryTimer);state.retryTimer=null;addDiag('AUTO_FULL_RETRY_DISABLED','差分共有のみ使用');}
 loadDirtyState();
 
 const emit=()=>window.dispatchEvent(new CustomEvent('dd-cloud-status',{detail:publicState()}));
@@ -553,63 +553,12 @@ async function pullEntryRecords(reason='timer'){
  finally{state.receiveBusy=false}
 }
 
-function queuePush(mark=true){if(mark)markDirty();if(state.recoveryProtected||!state.user||state.accessStatus!=='approved'||state.applying)return;clearTimeout(state.syncTimer);state.syncTimer=setTimeout(()=>push().catch(()=>scheduleRetry()),700)}
+function queuePush(mark=true){if(state.recoveryProtected||!state.user||state.accessStatus!=='approved'||state.applying)return;clearTimeout(state.syncTimer);state.syncTimer=setTimeout(async()=>{const r=await pushMeta();if(!r?.ok)addDiag('META_AUTO_SAVE_FAILED',r?.reason||'unknown')},700)}
 
 async function checkForRemoteUpdates(reason='timer'){
- if(state.receiveBusy||state.applying||state.accessStatus!=='approved'||!state.workspaceId||document.visibilityState==='hidden')return {ok:false,reason:'not_ready'};
- state.receiveBusy=true;
- try{
-  // Ver25.42: always inspect the remote revision before deciding whether a stale local dirty flag may block receive.
-  const rows=await rest(`app_snapshots?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&select=revision,updated_at,payload&limit=1`);
-  const row=Array.isArray(rows)?rows[0]:null;
-  const remoteRevision=Number(row?.revision||0);
-  if(state.dirty){
-   try{
-    const fixed=await reconcileDirtyStateWithRemote();
-    if(!fixed.cleared){
-     addDiag('RECEIVE_DIRTY_PROTECTED',`${reason}: local=${state.revision} remote=${remoteRevision}`);
-     scheduleRetry();
-     return {ok:false,reason:'local_dirty',remoteRevision};
-    }
-    // Ver25.43: reconcileDirtyStateWithRemote previously advanced only the revision.
-    // That made iPhone report the latest revision while still displaying its old payload.
-    // Apply the confirmed remote payload immediately, then recalculate and redraw.
-    if(fixed.payload&&typeof fixed.payload==='object'){
-     const local=getLocalUserName();
-     const members=Array.isArray(window.db?.members)?window.db.members.slice():[];
-     state.applying=true;
-     window.db=fixed.payload;
-     if(typeof window.recalculateStoredEntries==='function')window.recalculateStoredEntries(window.db);
-     mergeSharedMembers(members);
-     if(local)window.db.currentUser=local;
-     try{
-      const saved=typeof window.compactDBForStorage==='function'?window.compactDBForStorage(window.db):window.db;
-      localStorage.setItem(window.KEY||'dd_tiktok_app_v14_production',JSON.stringify(saved));
-     }catch(_){}
-     state.applying=false;
-     state.recoveryProtected=false;
-     setStatus('復元・同期済み','cloud','','ready');
-     refreshUI();
-     addDiag('DIRTY_REMOTE_APPLIED',`revision=${state.revision}`);
-     return {ok:true,updated:true,revision:state.revision};
-    }
-   }catch(e){
-    addDiag('RECEIVE_DIRTY_CHECK_ERROR',String(e?.message||e));
-    scheduleRetry();
-    return {ok:false,reason:'local_dirty',remoteRevision};
-   }
-  }
-  if(remoteRevision>Number(state.revision||0)){
-   addDiag('REMOTE_UPDATE',`${reason}: ${state.revision}->${remoteRevision}`);
-   const result=await pull();
-   if(result?.found)refreshUI();
-   return {ok:true,updated:Boolean(result?.found),revision:state.revision};
-  }
-  return {ok:true,updated:false,revision:state.revision};
- }catch(e){
-  console.warn('automatic receive:',e);
-  return {ok:false,error:e.message};
- }finally{state.receiveBusy=false;}
+ // Ver25.84: 5.8MBの旧親データ自動確認・自動復元を停止。
+ // 数字はapp_entry_records、端末・招待はapp_meta_stateだけで受信する。
+ return {ok:true,updated:false,revision:state.revision,reason:'legacy-parent-sync-disabled'};
 }
 function startAutomaticReceive(){
  clearInterval(state.receiveTimer);
