@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.67-device-owner-integration">
+<meta name="dd-build" content="25.68-owner-cleanup-fixed">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -5341,8 +5341,8 @@ async function adminOrganizeDuplicate(groupKey,index){
    await window.DDCloud.restoreCurrentOwnerByPin(pin);
   }
   for(const m of remove){
-   // 古いオーナーは一般へ戻してから削除し、唯一のオーナー保護に抵触しないようにする。
-   if(m.role==='owner')await window.DDCloud.updateMemberByPin(pin,m.user_id,{role:'member',status:'approved'});
+   // この端末の新オーナー復旧が完了した後は、旧オーナーを一般へ変更せず直接整理する。
+   // 旧オーナーの更新RPCは対象保護で400になるため呼ばない。
    await window.DDCloud.deleteMemberByPin(pin,m.user_id);
   }
   toast(`${keep.display_name}さんをこの端末の正式登録へ統合しました`);ddAdminLastHash='';await renderAdminPage();
@@ -5528,7 +5528,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.67';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.68';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();

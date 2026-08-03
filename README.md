@@ -1,3 +1,3 @@
-D&D❀TikTok Ver25.67
+D&D❀TikTok Ver25.68
 
-重複ログイン整理を「削除」ではなく、この端末を正式なオーナー登録へ安全に統合してから古い登録を整理する方式へ変更。入力・端末・年間データおよび共有処理は変更していません。
+Owner duplicate cleanup fix: after restoring this device as the approved owner, old duplicate registrations are deleted directly. Input, device, annual, backup, and cloud-sharing data are unchanged.
