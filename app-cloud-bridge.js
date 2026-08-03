@@ -741,6 +741,34 @@ async function inspectTrackedEntry(deviceName='Air2',date='2026-08-01'){
  return {deviceName,date,localRevision:Number(state.revision||0),remoteRevision:Number(row?.revision||0),remoteUpdatedAt:String(row?.updated_at||''),local:inspect(local),remote:inspect(remote)};
 }
 
+
+async function inspectAuthIdentity(){
+ if(!state.user)await ensureAuth();
+ if(!state.workspaceId)await verifyWorkspace();
+ const decodeJwt=(token)=>{try{const part=String(token||'').split('.')[1]||'';const b64=part.replace(/-/g,'+').replace(/_/g,'/');const txt=decodeURIComponent(atob(b64).split('').map(c=>'%' + c.charCodeAt(0).toString(16).padStart(2,'0')).join(''));return JSON.parse(txt)}catch(_){return {}}};
+ const claims=decodeJwt(state.accessToken);
+ let membershipRows=[],membershipError='',profileRows=[],profileError='';
+ try{membershipRows=await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&user_id=eq.${encodeURIComponent(state.user.id)}&select=*`,{timeoutMs:20000})}catch(e){membershipError=String(e?.message||e)}
+ try{profileRows=await rest(`profiles?user_id=eq.${encodeURIComponent(state.user.id)}&select=*`,{timeoutMs:20000})}catch(e){profileError=String(e?.message||e)}
+ return {
+  appUserId:String(state.user?.id||''),
+  jwtSub:String(claims?.sub||''),
+  jwtRole:String(claims?.role||''),
+  jwtExp:Number(claims?.exp||0),
+  workspaceId:String(state.workspaceId||''),
+  localRole:String(state.role||''),
+  localAccessStatus:String(state.accessStatus||''),
+  membershipRows:Array.isArray(membershipRows)?membershipRows:[],
+  membershipError,
+  profileRows:Array.isArray(profileRows)?profileRows:[],
+  profileError,
+  stage:String(state.stage||''),
+  status:String(state.status||''),
+  lastError:String(state.lastError||''),
+  deviceRegistrationId:getDeviceRegistrationId()
+ };
+}
+
 async function inspectConnection(){
  if(!state.user)await ensureAuth();
  if(!state.workspaceId)await verifyWorkspace();
@@ -769,7 +797,7 @@ async function inspectConnection(){
   error:String(state.lastError||'')
  };
 }
-window.DDCloud={state,isConfigured:configured,init,pull,push,pushEntryById,deleteEntryById,pushMeta,pullMeta,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.59',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,pull,push,pushEntryById,deleteEntryById,pushMeta,pullMeta,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectAuthIdentity,inspectConnection,inspectTrackedEntry,async syncNow(){return push()},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.59',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);if(!window.DD_SKIP_AUTO_PUSH&&!state.applying){clearTimeout(state.metaTimer);state.metaTimer=setTimeout(()=>pushMeta().catch(console.warn),500)}return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
