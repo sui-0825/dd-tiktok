@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.75-light-meta-sync">
+<meta name="dd-build" content="25.76-cloud-recovery-receive-only">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -5513,7 +5513,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.75';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.76';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
@@ -5541,7 +5541,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
  const oldInsight=window.renderDeviceInviteInsight;
  window.renderDeviceInviteInsight=function(d){const box=document.getElementById('deviceInviteInsight');if(!box)return;if((d.type||'normal')==='parent'){box.innerHTML=`<div class="parent-strength-card"><b>招待成功率</b><div class="parent-strength-tabs"><button class="active" onclick="renderParentStrength('${d.id}','month',this)">今月</button><button onclick="renderParentStrength('${d.id}','today',this)">今日</button><button onclick="renderParentStrength('${d.id}','year',this)">今年</button><button onclick="renderParentStrength('${d.id}','all',this)">全期間</button></div><div id="parentStrengthDynamic"></div></div>`;renderParentStrength(d.id,'month');return}if(oldInsight)oldInsight(d)};
  window.renderParentStrength=function(parentId,mode='month',btn=null){const target=document.getElementById('parentStrengthDynamic');if(!target)return;document.querySelectorAll('.parent-strength-tabs button').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');const prefix=mode==='today'?dkey():mode==='month'?mkey():mode==='year'?ykey():'';const a=aggregate(parentId,prefix),month=mkey();const ranking=inviteParents().map(p=>({id:p.id,...aggregate(p.id,month)})).filter(x=>x.total>0).sort((x,y)=>y.rate-x.rate||y.total-x.total),rank=ranking.findIndex(x=>x.id===parentId)+1;target.innerHTML=`<div class="parent-strength-main"><div class="parent-strength-rate"><small>${mode==='today'?'今日':mode==='month'?'今月':mode==='year'?'今年':'全期間'}の成功率</small><b>${a.total?percentText(a.rate):'—'}</b></div><div class="parent-strength-counts"><span>招待 <b>${a.total}件</b></span><span>成功 <b>${a.ok}件</b></span><span>対象外 <b>${Math.max(0,a.total-a.ok)}件</b></span></div></div><div class="parent-strength-rank">🏆 今月の親機ランキング：${rank||'-'}位 / ${ranking.length}台中</div>`};
- document.addEventListener('DOMContentLoaded',()=>{const badge=document.getElementById('ddBuildBadge');if(badge)badge.textContent='Ver25.75'});
+ document.addEventListener('DOMContentLoaded',()=>{const badge=document.getElementById('ddBuildBadge');if(badge)badge.textContent='Ver25.76'});
 })();
 </script>
 <script id="v2563-canonical-start-screen">
