@@ -2,3 +2,6 @@ D&D TikTok Ver25.56 public access restore. Email login gate removed by restoring
 
 
 Ver25.58: Connect app_entry_records receive loop and initialize cursor from snapshot updated_at instead of current time. Upload no longer advances receive cursor.
+
+
+Ver25.59: Backup restore lock and exact snapshot commit. Build badge and reset URL updated to 25.59.
