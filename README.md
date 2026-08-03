@@ -1,7 +1,6 @@
-D&D TikTok Ver25.56 public access restore. Email login gate removed by restoring anonymous-access stable build. Supabase anonymous sign-ins must be enabled.
+# D&D❀TikTok Ver26.03 Royal Bank
 
-
-Ver25.58: Connect app_entry_records receive loop and initialize cursor from snapshot updated_at instead of current time. Upload no longer advances receive cursor.
-
-
-Ver25.59: Backup restore lock and exact snapshot commit. Build badge and reset URL updated to 25.59.
+- Ver25の紺×金「収支銀行」表示を基準にした新規安定版
+- ローカル保存優先
+- 旧JSONバックアップ読み込み対応
+- 招待・承認・掲示板・メモ・複雑なクラウド同期なし
