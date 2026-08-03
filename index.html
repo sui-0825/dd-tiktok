@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.78-stable-entry-share-repair">
+<meta name="dd-build" content="25.63-source-fixed-share">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -2457,7 +2457,6 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
   <div class="admin-hero"><div><small>D&amp;D❀TikTok ADMIN</small><h2>管理者ページ</h2><p id="adminIdentity">権限を確認しています…</p></div><span>👑</span></div>
   <div class="admin-summary-grid"><div><small>承認待ち</small><b id="adminPendingCount">0</b></div><div><small>承認済み</small><b id="adminApprovedCount">0</b></div><div><small>停止中</small><b id="adminSuspendedCount">0</b></div></div>
   <div class="sectiontitle"><h2>利用者管理</h2><span class="count-pill" id="adminMemberCount">0人</span></div>
-  <div id="duplicateMemberNotice" class="admin-empty-note" style="display:none"></div>
   <div class="admin-empty-note">新しい利用者は「承認待ち」に入り、許可するまでアプリ本体へ入れません。管理者への変更はオーナーだけが行えます。</div>
   <div id="adminMemberList" class="admin-member-list"><div class="empty">読み込み中…</div></div>
   
@@ -2601,37 +2600,66 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
 </div>
 
 <div id="inviteOverlay" class="bulletin-overlay" aria-hidden="true">
-  <div class="bulletin-sheet hotel-invite-sheet">
-    <div class="hotel-invite-head">
-      <div class="hotel-seal">♛</div>
-      <div><small>DAILY RECEPTION</small><b>招待受付</b><span>親機ごとに本日の招待結果をまとめて記録</span></div>
-      <button class="iconbtn" onclick="closeOverlay('inviteOverlay')">×</button>
+  <div class="bulletin-sheet invite-two-screen-sheet">
+    <div class="bulletin-sheet-head"><div><b id="inviteScreenTitle">🎟️ 招待登録</b><div class="sub" id="inviteScreenSub">削って当たりを確認するように、楽しく登録</div></div><button class="iconbtn" onclick="finishInviteSession(true)">×</button></div>
+    <div class="invite-screen-tabs" role="tablist" aria-label="招待画面切り替え">
+      <button id="inviteRegisterTab" class="active" type="button" onclick="setInviteScreen('register')">🎟️ 招待登録</button>
+      <button id="inviteManageTab" type="button" onclick="setInviteScreen('manage')">✨ 招待管理</button>
     </div>
-    <div class="hotel-date-controls">
-      <button type="button" class="hotel-date-pill" id="inviteHotelDateButton" onclick="openInviteCalendar()" aria-label="招待記録の日付を選択"><span id="inviteHotelDateLabel">—</span><span class="hotel-date-caret">⌄</span></button>
-      <input id="inviteHotelDateInput" class="hotel-date-input" type="date" onchange="changeInviteSummaryDate(this.value)">
-      <button type="button" class="hotel-today-btn" id="inviteTodayButton" onclick="changeInviteSummaryDate(dkey())" hidden>今日へ戻る</button>
-    </div>
-    <section class="hotel-checkin-card">
-      <div class="hotel-card-title"><span>🛎️</span><div><b id="inviteCardTitle">本日の招待結果を記録</b><small>端末ごとではなく、親機（代表）ごとに入力します</small></div></div>
-      <div class="hotel-field"><label for="inviteParentSelect">代表者名 / 親機名</label><select id="inviteParentSelect"><option value="">親機を選択してください</option></select></div>
-      <div class="hotel-result-grid">
-        <div class="hotel-field"><label for="inviteSuccessCount">成功数</label><input id="inviteSuccessCount" type="number" inputmode="numeric" min="0" placeholder="4" oninput="updateHotelInvitePreview()"></div>
-        <div class="hotel-slash">／</div>
-        <div class="hotel-field"><label for="inviteTotalCount">招待数</label><input id="inviteTotalCount" type="number" inputmode="numeric" min="0" placeholder="5" oninput="updateHotelInvitePreview()"></div>
+    <section id="inviteRegisterScreen" class="invite-screen active">
+    <div class="invite-console"><div class="scratch-marquee"><span>★</span><b>LUCKY INVITE SCRATCH</b><span>★</span></div>
+      <div class="invite-topline">
+        <div class="invite-parent-panel">
+          <div id="inviteParentLock" class="invite-parent-lock empty"><span>🎫 親機を選んでスタート</span><small>READY</small></div>
+          <label for="inviteParentSelect">今回のくじ売り場（親機）</label>
+          <select id="inviteParentSelect" class="invite-parent-select" onchange="lockInviteParent(this.value)"><option value="">親機を選択</option></select>
+        </div>
+        <div class="invite-success-mini"><small>今月の成功率</small><b id="inviteLiveRate">—</b><span id="inviteLiveCount">親機を選択</span></div>
       </div>
-      <div class="hotel-helper">例：成功4件・招待5件 → 4/5</div>
-      <div class="hotel-rate-badge"><small>成功率（自動計算）</small><b id="inviteHotelRate">—</b><span id="inviteHotelFraction">成功数 / 招待数</span></div>
-      <button class="hotel-register-btn" type="button" onclick="saveInviteSummary()">🛎️ 記録する</button>
-      <div id="inviteRegisterMessage" class="hotel-message"></div>
+      <div class="invite-meta-row">
+        <div class="invite-device-panel"><label for="inviteDeviceSearch">チケット番号（端末）</label><input id="inviteDeviceSearch" class="bulletin-input" placeholder="例 301" inputmode="numeric" enterkeyhint="done" autocomplete="off" autocorrect="off" spellcheck="false"></div>
+        <div class="invite-date-mini"><label for="inviteDate">招待日</label><div class="date-shell"><input id="inviteDate" type="date"></div></div>
+      </div>
+      <div class="invite-judgement-label"><span>銀のスクラッチ</span><small>どちらかをタップして結果を決定</small></div>
+      <div class="invite-campaign-buttons">
+        <button id="campaignSuccessBtn" class="success" type="button" onclick="setInviteCampaign(true)"><span class="scratch-foil" aria-hidden="true"></span><span class="invite-result-icon">🎯</span><span>対象</span><span class="invite-result-sub">当たり！</span></button>
+        <button id="campaignFailBtn" class="fail" type="button" onclick="setInviteCampaign(false)"><span class="scratch-foil" aria-hidden="true"></span><span class="invite-result-icon">✕</span><span>対象外</span><span class="invite-result-sub">はずれ</span></button>
+      </div>
+      <div class="invite-action-dock"><button id="inviteScratchRegisterBtn" class="register" onclick="addInvite()">🎟️ 削って登録する！</button><button class="finish" onclick="finishInviteSession(false)">親機終了</button></div>
+      <div id="inviteRegisterMessage" class="invite-register-message"></div>
+    </div>
+</section>
+    <section id="inviteManageScreen" class="invite-screen">
+      <div class="scratch-summary-banner"><div class="scratch-summary-title"><span>MONTHLY LUCKY BOARD</span>✨ 今月のくじ結果</div><div class="scratch-summary-kpis"><div><small>対象</small><b id="inviteSummaryOk">0</b><span>件</span></div><div><small>対象外</small><b id="inviteSummaryNg">0</b><span>件</span></div><div><small>成功率</small><b id="inviteSummaryRate">—</b></div></div></div>
+      <div class="invite-parent-picker ticket-panel">
+        <label for="inviteManageParentSelect"><span>🎟️ 詳細を見る親機</span><small>親機を選ぶと結果を絞り込み</small></label>
+        <select id="inviteManageParentSelect" onchange="setInviteParentFilter(this.value)"><option value="">すべての親機</option></select>
+        <div class="invite-parent-picker-note">親機カードをタップすると、日付ごとの招待履歴が開きます。</div>
+      </div>
+      <div id="inviteFilterSummary" class="invite-filter-summary"><span>すべての親機を表示中</span><span>🌱</span></div>
+    <details id="inviteMonthDetails" class="invite-more ticket-panel" open>
+      <summary><span>📋 今月の招待詳細を見る</span><span id="inviteMonthTotal" class="count-pill">0件</span></summary>
+      <div class="invite-more-body">
+        <div class="invite-detail-switch" role="tablist" aria-label="招待詳細の表示方法">
+          <button id="inviteViewParentBtn" class="active" type="button" onclick="setInviteMonthView('parent')">🎟️ 親機別</button>
+          <button id="inviteViewDateBtn" type="button" onclick="setInviteMonthView('date')">🗓️ 日付別</button>
+        </div>
+        <div id="inviteMonthViewHint" class="invite-view-hint">親機をタップすると、その親機で招待した端末まで見られます</div>
+        <div id="inviteMonthList" class="compact-history"></div>
+      </div>
+    </details>
+    <details id="inviteYearDetails" class="invite-more ticket-panel">
+      <summary><span>📊 今年の月別サマリーを見る</span><span id="inviteYearTotal" class="count-pill">0件</span></summary>
+      <div class="invite-more-body"><div id="inviteYearList"></div></div>
+    </details>
     </section>
-    <section class="hotel-list-card">
-      <div class="hotel-list-title"><span>🔑</span><div><b id="inviteListTitle">本日の受付一覧</b><small>親機ごとの招待結果サマリー</small></div></div>
-      <div id="inviteTodayReceptionList"></div>
-    </section>
-    <details class="hotel-history-card" open><summary>今月の親機別サマリー <span id="inviteMonthTotal">0件</span></summary><div id="inviteMonthList"></div></details>
-    <details class="hotel-history-card"><summary>今年の月別サマリー <span id="inviteYearTotal">0件</span></summary><div id="inviteYearList"></div></details>
   </div>
+
+    <div id="inviteKeyboardBar" class="invite-keyboard-bar" aria-label="招待入力中の操作">
+      <button id="quickCampaignSuccess" class="quick-success" type="button" onclick="setInviteCampaign(true)">🎯 対象</button>
+      <button id="quickCampaignFail" class="quick-fail" type="button" onclick="setInviteCampaign(false)">✕ 対象外</button>
+      <button class="quick-register" type="button" onclick="addInvite()">🌿 登録する</button>
+    </div>
 </div>
 <div id="inviteTicketOverlay" class="invite-ticket-overlay" aria-hidden="true" onclick="closeInviteTicket(event)">
   <div class="invite-ticket-card" role="dialog" aria-modal="true">
@@ -4176,14 +4204,7 @@ function saveAnnualEditor(){
  }catch(e){const err=document.getElementById('annualEditError');err.textContent=e.message||'入力形式を確認してください';err.classList.add('show')}
 }
 function deleteAnnualEditor(){
- if(!annualEditState?.entry||!confirm('この入力を削除しますか？'))return;
- const {deviceId,entry,date}=annualEditState;
- const deletedId=entry.id;
- db.entries=db.entries.filter(x=>x.id!==deletedId);
- annualLastSavedCell=`${date}|${deviceId}`;recalcDevice(deviceId);
- window.DD_SKIP_AUTO_PUSH=true;persist();window.DD_SKIP_AUTO_PUSH=false;
- closeAnnualEditor();renderAnnual();renderHome();toast('端末から削除しました。共有削除を確認中…');
- setTimeout(async()=>{const r=await window.DDCloud?.deleteEntryById?.(deletedId,deviceId);toast(r?.ok?'削除を共有保存しました':'共有削除に失敗しました。端末には削除状態が残っています')},0)
+ if(!annualEditState?.entry||!confirm('この入力を削除しますか？'))return;const {deviceId,entry,date}=annualEditState;db.entries=db.entries.filter(x=>x.id!==entry.id);annualLastSavedCell=`${date}|${deviceId}`;recalcDevice(deviceId);persist();closeAnnualEditor();renderAnnual();renderHome();toast('入力を削除し、後続だけ再計算しました')
 }
 
 function renderAnnual(){
@@ -5147,7 +5168,7 @@ window.addEventListener('DOMContentLoaded',()=>{
 </style>
 <style id="v170-admin-style">
 .restore-mode-box{margin-top:12px;padding:13px;border:1px solid #dfe7ea;border-radius:16px;background:#f8fbfc}.restore-mode-tabs{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:10px}.restore-mode-tabs button{border:1px solid #d7e0e5;border-radius:11px;padding:10px 8px;background:#fff;color:#49616f;font-weight:850}.restore-mode-tabs button.active{background:#1c526d;color:#fff;border-color:#1c526d}.restore-range{display:grid;grid-template-columns:1fr 1fr;gap:8px}.restore-range.hide{display:none}.restore-note{display:block;margin-top:8px;color:#667983;font-size:11px;line-height:1.55}
-.admin-hero{margin:12px 16px;padding:20px;border-radius:24px;background:linear-gradient(145deg,#172f48,#244d68);color:#fff;display:flex;justify-content:space-between;align-items:center;box-shadow:0 12px 30px rgba(21,48,72,.18)}.admin-hero small{letter-spacing:.15em;opacity:.72}.admin-hero h2{margin:5px 0 4px;font-size:25px}.admin-hero p{margin:0;opacity:.86;font-size:13px}.admin-hero>span{font-size:42px}.admin-summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 16px 18px}.admin-summary-grid>div{background:#fff;border:1px solid #e6e9ec;border-radius:17px;padding:13px;text-align:center}.admin-summary-grid small{display:block;color:#69747d;font-size:11px}.admin-summary-grid b{font-size:24px;color:#173c55}.admin-member-list{margin:0 16px 20px;display:grid;gap:10px}.admin-member{background:#fff;border:1px solid #e4e9ed;border-radius:18px;padding:14px}.admin-member-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.admin-member-head b{font-size:16px}.admin-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}.admin-badge{font-size:10px;font-weight:800;padding:4px 7px;border-radius:999px;background:#edf3f6;color:#38566a}.admin-badge.pending{background:#fff5d9;color:#8a6500}.admin-badge.approved{background:#e7f8ee;color:#17633a}.admin-badge.suspended,.admin-badge.rejected{background:#ffe9e9;color:#9a2c2c}.admin-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}.admin-actions button{border:0;border-radius:11px;padding:9px 11px;font-weight:800;font-size:12px}.admin-actions .approve{background:#dff6e8;color:#17633a}.admin-actions .stop{background:#ffe8e8;color:#922}.admin-actions .role{background:#edf1f5;color:#28475d}.admin-actions .restore{background:#e9f3ff;color:#245b85}.admin-actions .reject{background:#f4f1f1;color:#6f4a4a}.admin-actions .delete{background:#fff0f0;color:#a12626;border:1px solid #f1caca}.admin-member.pending-card{border-color:#edcc69;background:#fffdf6}.admin-member.self-card{border-color:#c6a94e;background:#fffdf3}.admin-member-note{margin-top:9px;color:#7a858c;font-size:11px;line-height:1.5}.admin-member.duplicate-card{border-color:#e7b75a;background:#fffaf0}.admin-badge.duplicate{background:#fff0c8;color:#805600}.duplicate-tools{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.duplicate-tools button{border:0;border-radius:11px;padding:9px 11px;font-weight:850;font-size:12px}.duplicate-tools .showdup{background:#fff0c8;color:#805600}.duplicate-tools .showall{background:#edf3f6;color:#38566a}.duplicate-group{background:#fffaf0;border:2px solid #e7b75a;border-radius:20px;padding:14px;margin-bottom:14px}.duplicate-group h3{margin:0 0 5px;font-size:17px}.duplicate-group-help{font-size:12px;color:#735f3a;line-height:1.55;margin-bottom:10px}.duplicate-choice{display:block;border:1px solid #ead7aa;border-radius:15px;padding:12px;margin:8px 0;background:#fff;cursor:pointer}.duplicate-choice.recommended{box-shadow:0 0 0 2px #d7b65c inset}.duplicate-choice input{margin-right:8px;transform:scale(1.15)}.duplicate-choice-title{font-weight:900}.duplicate-choice-meta{font-size:11px;color:#6f7478;margin:6px 0 0 25px;line-height:1.5}.duplicate-organize-btn{width:100%;border:0;border-radius:14px;padding:12px;margin-top:10px;background:#1f7654;color:#fff;font-weight:900}.duplicate-organize-btn:disabled{opacity:.45}.duplicate-safety{font-size:11px;color:#8a5d37;line-height:1.5;margin-top:8px}.admin-empty-note{margin:0 16px 14px;padding:12px 14px;border-radius:15px;background:#f4f8fa;color:#55707e;font-size:12px;line-height:1.6}.access-gate{position:fixed;inset:0;z-index:20000;background:linear-gradient(160deg,#f7fbfd,#eef8f6);display:none;align-items:center;justify-content:center;padding:24px}.access-gate.show{display:flex}.access-card{width:min(420px,100%);background:#fff;border:1px solid #e0e8eb;border-radius:28px;padding:30px 24px;text-align:center;box-shadow:0 25px 60px rgba(28,54,72,.16)}.access-mark{font-size:42px}.access-card small{display:block;letter-spacing:.16em;color:#6b7b85;margin-top:8px}.access-card h2{margin:12px 0 8px;color:#173c55}.access-card p{color:#596974;line-height:1.7}.access-card button{border:0;border-radius:14px;padding:13px 20px;background:#1c526d;color:#fff;font-weight:800}.access-card button[hidden]{display:none}
+.admin-hero{margin:12px 16px;padding:20px;border-radius:24px;background:linear-gradient(145deg,#172f48,#244d68);color:#fff;display:flex;justify-content:space-between;align-items:center;box-shadow:0 12px 30px rgba(21,48,72,.18)}.admin-hero small{letter-spacing:.15em;opacity:.72}.admin-hero h2{margin:5px 0 4px;font-size:25px}.admin-hero p{margin:0;opacity:.86;font-size:13px}.admin-hero>span{font-size:42px}.admin-summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 16px 18px}.admin-summary-grid>div{background:#fff;border:1px solid #e6e9ec;border-radius:17px;padding:13px;text-align:center}.admin-summary-grid small{display:block;color:#69747d;font-size:11px}.admin-summary-grid b{font-size:24px;color:#173c55}.admin-member-list{margin:0 16px 20px;display:grid;gap:10px}.admin-member{background:#fff;border:1px solid #e4e9ed;border-radius:18px;padding:14px}.admin-member-head{display:flex;align-items:center;justify-content:space-between;gap:8px}.admin-member-head b{font-size:16px}.admin-badges{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px}.admin-badge{font-size:10px;font-weight:800;padding:4px 7px;border-radius:999px;background:#edf3f6;color:#38566a}.admin-badge.pending{background:#fff5d9;color:#8a6500}.admin-badge.approved{background:#e7f8ee;color:#17633a}.admin-badge.suspended,.admin-badge.rejected{background:#ffe9e9;color:#9a2c2c}.admin-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}.admin-actions button{border:0;border-radius:11px;padding:9px 11px;font-weight:800;font-size:12px}.admin-actions .approve{background:#dff6e8;color:#17633a}.admin-actions .stop{background:#ffe8e8;color:#922}.admin-actions .role{background:#edf1f5;color:#28475d}.admin-actions .restore{background:#e9f3ff;color:#245b85}.admin-actions .reject{background:#f4f1f1;color:#6f4a4a}.admin-actions .delete{background:#fff0f0;color:#a12626;border:1px solid #f1caca}.admin-member.pending-card{border-color:#edcc69;background:#fffdf6}.admin-member.self-card{border-color:#c6a94e;background:#fffdf3}.admin-member-note{margin-top:9px;color:#7a858c;font-size:11px;line-height:1.5}.admin-empty-note{margin:0 16px 14px;padding:12px 14px;border-radius:15px;background:#f4f8fa;color:#55707e;font-size:12px;line-height:1.6}.access-gate{position:fixed;inset:0;z-index:20000;background:linear-gradient(160deg,#f7fbfd,#eef8f6);display:none;align-items:center;justify-content:center;padding:24px}.access-gate.show{display:flex}.access-card{width:min(420px,100%);background:#fff;border:1px solid #e0e8eb;border-radius:28px;padding:30px 24px;text-align:center;box-shadow:0 25px 60px rgba(28,54,72,.16)}.access-mark{font-size:42px}.access-card small{display:block;letter-spacing:.16em;color:#6b7b85;margin-top:8px}.access-card h2{margin:12px 0 8px;color:#173c55}.access-card p{color:#596974;line-height:1.7}.access-card button{border:0;border-radius:14px;padding:13px 20px;background:#1c526d;color:#fff;font-weight:800}.access-card button[hidden]{display:none}
 
 .owner-emergency-btn{margin-top:12px!important;background:transparent!important;color:#8b6c17!important;border:1px solid rgba(201,160,43,.45)!important;box-shadow:none!important}.owner-pin-panel{margin-top:14px;padding:16px;border-radius:18px;background:#fffaf0;border:1px solid #ead9a4}.owner-pin-panel[hidden]{display:none}.owner-pin-panel small{color:#a3832d;letter-spacing:.16em}.owner-pin-panel b{display:block;margin:7px 0 10px;color:#173c55}.owner-pin-panel input{width:150px;text-align:center;font-size:28px;letter-spacing:.35em;padding:10px;border:1px solid #d9c37d;border-radius:13px;background:#fff;outline:none}.owner-pin-error{min-height:20px;margin-top:8px;color:#a33;font-size:12px;font-weight:700}.owner-pin-actions{display:flex;gap:8px;justify-content:center;margin-top:8px}.owner-pin-actions button{min-width:105px}.owner-pin-actions button:first-child{background:#edf1f3;color:#345}.owner-pin-actions button:last-child{background:linear-gradient(135deg,#bf8b13,#efd36b);color:#fff}
 </style>
@@ -5274,58 +5295,6 @@ async function restoreMyOwnerState(){
 }
 
 let ddAdminLastHash='';
-let ddAdminDuplicatesOnly=false;
-function normalizeMemberName(name){return String(name||'').normalize('NFKC').replace(/[\s　]+/g,'').toLowerCase()}
-function memberTimeValue(m){return Math.max(Date.parse(m?.last_seen_at||0)||0,Date.parse(m?.approved_at||0)||0,Date.parse(m?.created_at||0)||0)}
-function buildDuplicateGroups(rows){
- const map=new Map();
- for(const m of rows){const key=normalizeMemberName(m.display_name);if(!key||key==='名前未登録')continue;if(!map.has(key))map.set(key,[]);map.get(key).push(m)}
- return [...map.values()].filter(g=>g.length>1).map(g=>g.sort((a,b)=>Number(b.is_self)-Number(a.is_self)||(b.role==='owner')-(a.role==='owner')||(b.status==='approved')-(a.status==='approved')||memberTimeValue(b)-memberTimeValue(a)))
-}
-function toggleDuplicateMembers(){ddAdminDuplicatesOnly=!ddAdminDuplicatesOnly;ddAdminLastHash='';renderAdminPage()}
-let ddAdminRowsCache=[];
-function duplicateGroupKey(group){return normalizeMemberName(group?.[0]?.display_name||'')}
-function renderDuplicateGroups(groups,currentRole){
- if(currentRole!=='owner')return '<div class="empty">重複整理はオーナーのみ行えます</div>';
- return groups.map((group,index)=>{
-  const key=duplicateGroupKey(group);const self=group.find(m=>m.is_self);const owner=group.find(m=>m.role==='owner');
-  const recommendedId=String(self?.user_id||owner?.user_id||group[0]?.user_id||'');
-  const choices=group.map(m=>{const chosen=String(m.user_id)===recommendedId;return `<label class="duplicate-choice ${chosen?'recommended':''}"><div><input type="radio" name="dup_${index}" value="${esc(m.user_id)}" ${chosen?'checked':''}><span class="duplicate-choice-title">${esc(m.display_name)} ${m.is_self?'（この端末）':''}</span></div><div class="duplicate-choice-meta">${m.role==='owner'?'👑 オーナー':m.role==='admin'?'🛎️ 管理者':'👤 一般'} ／ ${accessLabel(m.status)} ／ ID末尾 ${esc(String(m.user_id||'').slice(-8))}<br>最終接続：${esc(formatMemberLastSeen(m.last_seen_at))}${chosen?' ／ 推奨：この端末を正式登録として残します':''}</div></label>`}).join('');
-  const help=self&&owner&&String(self.user_id)!==String(owner.user_id)
-   ?'この端末の仮登録へオーナー権限を安全に引き継ぎ、古いオーナー登録と残りの重複だけを整理します。入力・端末・年間データには触れません。'
-   :'残す登録を1件選んでください。選ばなかった登録だけを削除します。入力・端末・年間データは削除しません。';
-  const label=self&&owner&&String(self.user_id)!==String(owner.user_id)?'この端末へ統合して整理':'選んだ1件を残して整理';
-  return `<section class="duplicate-group"><h3>${esc(group[0]?.display_name||'名前なし')}：${group.length}件</h3><div class="duplicate-group-help">${help}</div>${choices}<button class="duplicate-organize-btn" onclick="adminOrganizeDuplicate('${esc(key)}',${index})">${label}</button><div class="duplicate-safety">安全処理：この端末を残す場合は、先に承認・オーナー権限を復旧してから古い登録を整理します。データ本体は削除しません。</div></section>`
- }).join('')
-}
-async function adminOrganizeDuplicate(groupKey,index){
- const groups=buildDuplicateGroups(ddAdminRowsCache);const group=groups.find(g=>duplicateGroupKey(g)===groupKey)||groups[index];
- if(!group?.length){toast('重複候補を読み直してください');return}
- const picked=document.querySelector(`input[name="dup_${index}"]:checked`);let keepId=String(picked?.value||'');
- const self=group.find(m=>m.is_self);const oldOwner=group.find(m=>m.role==='owner'&&!m.is_self);
- // 匿名ログインは別IDへ付け替えられないため、この端末を正式登録として残す。
- if(self&&oldOwner)keepId=String(self.user_id);
- const keep=group.find(m=>String(m.user_id)===keepId);if(!keep){toast('残す登録を選んでください');return}
- const remove=group.filter(m=>String(m.user_id)!==keepId);
- if(!remove.length){toast('削除対象がありません');return}
- const message=self&&oldOwner
-  ?`「${keep.display_name}（この端末）」を正式なオーナー登録へ統合し、古い登録${remove.length}件を整理しますか？\n\n入力・端末・年間データは削除しません。`
-  :`「${keep.display_name}」の登録（ID末尾 ${String(keep.user_id).slice(-8)}）を残し、ほかの${remove.length}件を削除しますか？\n\n入力・端末・年間データは削除しません。`;
- if(!confirm(message))return;
- try{
-  const pin=sessionStorage.getItem('dd_admin_pin_session')||'';if(!pin)throw new Error('管理者ページを開き直して暗証番号を入力してください');
-  if(self&&oldOwner){
-   // 先にこの端末を承認済みオーナーへ復旧。成功前には何も削除しない。
-   await window.DDCloud.restoreCurrentOwnerByPin(pin);
-  }
-  for(const m of remove){
-   // この端末の新オーナー復旧が完了した後は、旧オーナーを一般へ変更せず直接整理する。
-   // 旧オーナーの更新RPCは対象保護で400になるため呼ばない。
-   await window.DDCloud.deleteMemberByPin(pin,m.user_id);
-  }
-  toast(`${keep.display_name}さんをこの端末の正式登録へ統合しました`);ddAdminLastHash='';await renderAdminPage();
- }catch(e){toast(e.message||'重複を統合できませんでした');await renderAdminPage()}
-}
 async function renderAdminPage(silent=false){
  const root=document.getElementById('adminMemberList');if(!root)return;
  const s=window.DDCloud?.state||{};
@@ -5343,20 +5312,14 @@ async function renderAdminPage(silent=false){
    rows=await window.DDCloud.listMembers();
   }
   rows=rows.sort((a,b)=>adminStatusOrder(a.status)-adminStatusOrder(b.status)||Number(b.is_self)-Number(a.is_self)||String(a.display_name).localeCompare(String(b.display_name),'ja'));
-  ddAdminRowsCache=rows.slice();
-  const duplicateGroups=buildDuplicateGroups(rows);const duplicateIds=new Set(duplicateGroups.flat().map(m=>m.user_id));
-  const notice=document.getElementById('duplicateMemberNotice');
-  if(notice){if(duplicateGroups.length){notice.style.display='block';notice.innerHTML=`<b>⚠️ 重複ログイン候補 ${duplicateGroups.length}組</b><br>${ddAdminDuplicatesOnly?'各組で「残す1件」を選び、安全に整理できます。':'同じ名前の登録があります。詳細を開いて整理できます。'}<div class="duplicate-tools"><button class="${ddAdminDuplicatesOnly?'showall':'showdup'}" onclick="toggleDuplicateMembers()">${ddAdminDuplicatesOnly?'全員一覧へ戻る':'重複の詳細を開く'}</button></div>`}else{notice.style.display='none';notice.innerHTML=''}}
-  const displayRows=rows;
-  const hash=JSON.stringify([ddAdminDuplicatesOnly,...rows.map(m=>[m.user_id,m.display_name,m.status,m.role,Boolean(m.is_self),m.last_seen_at])]);
+  const hash=JSON.stringify(rows.map(m=>[m.user_id,m.display_name,m.status,m.role,Boolean(m.is_self)]));
   if(silent&&hash===ddAdminLastHash)return;
   ddAdminLastHash=hash;
   document.getElementById('adminMemberCount').textContent=`${rows.length}人`;
   document.getElementById('adminPendingCount').textContent=rows.filter(x=>x.status==='pending').length;
   document.getElementById('adminApprovedCount').textContent=rows.filter(x=>x.status==='approved').length;
   document.getElementById('adminSuspendedCount').textContent=rows.filter(x=>x.status==='suspended'||x.status==='rejected').length;
-  if(ddAdminDuplicatesOnly){root.innerHTML=duplicateGroups.length?renderDuplicateGroups(duplicateGroups,s.role):'<div class="empty">重複候補はありません</div>'}
-  else{root.innerHTML=displayRows.length?displayRows.map(m=>`<div class="admin-member ${m.status==='pending'?'pending-card':''} ${m.is_self?'self-card':''} ${duplicateIds.has(m.user_id)?'duplicate-card':''}"><div class="admin-member-head"><div><b>${esc(m.display_name)}</b><div class="admin-badges"><span class="admin-badge ${m.status}">${accessLabel(m.status)}</span><span class="admin-badge">${m.role==='owner'?'👑 オーナー':m.role==='admin'?'🛎️ 管理者':'👤 一般'}</span>${m.is_self?'<span class="admin-badge">あなた</span>':''}${duplicateIds.has(m.user_id)?'<span class="admin-badge duplicate">重複候補</span>':''}</div><div class="admin-member-note">ID末尾: ${esc(String(m.user_id||'').slice(-8))} ／ 最終接続: ${esc(formatMemberLastSeen(m.last_seen_at))}</div></div></div>${adminMemberActions(m,s.role)}</div>`).join(''):'<div class="empty">利用者はいません</div>'}
+  root.innerHTML=rows.length?rows.map(m=>`<div class="admin-member ${m.status==='pending'?'pending-card':''} ${m.is_self?'self-card':''}"><div class="admin-member-head"><div><b>${esc(m.display_name)}</b><div class="admin-badges"><span class="admin-badge ${m.status}">${accessLabel(m.status)}</span><span class="admin-badge">${m.role==='owner'?'👑 オーナー':m.role==='admin'?'🛎️ 管理者':'👤 一般'}</span>${m.is_self?'<span class="admin-badge">あなた</span>':''}</div></div></div>${adminMemberActions(m,s.role)}</div>`).join(''):'<div class="empty">利用者はいません</div>';
  }catch(e){if(!silent)root.innerHTML=`<div class="empty">${esc(e.message||'読み込めませんでした')}</div>`}
 }
 let ddAdminRefreshTimer=null;
@@ -5465,20 +5428,6 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
   .gear-menu-backdrop > .gear-menu-sheet,
   .invite-ticket-overlay > .invite-ticket-card{max-height:calc(100vh - 28px) !important}
 }
-
-/* ===== Ver25.78 ホテル受付風・親機別招待まとめ入力 ===== */
-#inviteOverlay .hotel-invite-sheet{max-width:680px;background:linear-gradient(180deg,#fffdf8,#f7f1e7);color:#3c352d;padding:0 16px 28px!important;border:1px solid #d8bd78;box-shadow:0 24px 70px rgba(54,43,25,.28);overflow:auto}
-.hotel-invite-head{display:grid;grid-template-columns:54px 1fr 42px;align-items:center;gap:12px;margin:0 -16px 12px;padding:15px 16px;background:linear-gradient(145deg,#102f4a,#183c58);color:#fff;border-bottom:2px solid #d7b45d;position:sticky;top:0;z-index:20}.hotel-invite-head .hotel-seal{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#4b356b,#2c214f);border:2px solid #d8b85f;color:#f4d67e;font-size:23px}.hotel-invite-head small{display:block;color:#e9cf8b;font-size:9px;letter-spacing:.18em;font-weight:900}.hotel-invite-head b{display:block;font-family:serif;font-size:22px}.hotel-invite-head span{display:block;color:#d7e0e7;font-size:11px;margin-top:2px}.hotel-invite-head .iconbtn{color:#fff;background:rgba(255,255,255,.08)}
-.hotel-date-controls{display:flex;justify-content:flex-end;align-items:center;gap:7px;margin:12px 0 10px;position:relative}.hotel-date-pill{appearance:none;width:max-content;margin:0;padding:8px 13px;border-radius:999px;background:#edf0e8;border:1px solid #d7ddcf;color:#315644;font-weight:850;font-size:12px;display:flex;align-items:center;gap:7px}.hotel-date-caret{font-size:13px;color:#886a2f}.hotel-date-input{position:absolute;right:84px;top:0;width:1px;height:1px;opacity:0;pointer-events:none}.hotel-today-btn{border:1px solid #d7bc77;background:#fffaf0;color:#765b27;border-radius:999px;padding:8px 10px;font-size:10px;font-weight:900}.hotel-today-btn[hidden]{display:none}
-.hotel-checkin-card,.hotel-list-card,.hotel-history-card{background:rgba(255,255,255,.88);border:1px solid #dec47e;border-radius:23px;box-shadow:0 10px 26px rgba(91,72,34,.08);padding:16px;margin:12px 0}.hotel-checkin-card{background:linear-gradient(145deg,#fffdfa,#fbf3e4)}
-.hotel-card-title,.hotel-list-title{display:flex;align-items:center;gap:11px;padding-bottom:12px;border-bottom:1px solid #e9ddc5}.hotel-card-title>span,.hotel-list-title>span{font-size:26px}.hotel-card-title b,.hotel-list-title b{display:block;font-size:17px}.hotel-card-title small,.hotel-list-title small{display:block;color:#81776b;font-size:11px;margin-top:3px}
-.hotel-field{margin-top:14px}.hotel-field label{display:block;font-weight:900;font-size:13px;margin:0 0 7px 2px;color:#4a4138}.hotel-field select,.hotel-field input{width:100%;min-height:54px;border:1.5px solid #d8c8aa;border-radius:15px;background:#fff;padding:0 14px;font-size:18px;font-weight:850;color:#3b352e;outline:none}.hotel-field select:focus,.hotel-field input:focus{border-color:#376b55;box-shadow:0 0 0 3px rgba(55,107,85,.10)}
-.hotel-result-grid{display:grid;grid-template-columns:1fr 30px 1fr;gap:5px;align-items:end}.hotel-slash{font-size:30px;text-align:center;padding-bottom:10px;color:#9d8a68}.hotel-result-grid input{text-align:center;font-size:26px}.hotel-helper{font-size:11px;color:#877b6c;margin:7px 2px 0}
-.hotel-rate-badge{margin:15px 0;padding:14px;text-align:center;border:1px solid #d2dacb;border-radius:18px;background:linear-gradient(145deg,#f5f8f1,#edf3e9)}.hotel-rate-badge small{display:block;color:#657563;font-weight:800}.hotel-rate-badge b{display:block;font-size:38px;color:#285c47;line-height:1.1;margin:4px}.hotel-rate-badge span{font-size:11px;color:#7d8579}
-.hotel-register-btn{width:100%;min-height:56px;border:0;border-radius:16px;background:linear-gradient(135deg,#285f49,#1d4b39);color:#fff;font-size:18px;font-weight:900;box-shadow:0 8px 18px rgba(31,78,59,.22)}.hotel-register-btn:active{transform:scale(.985)}.hotel-message{min-height:18px;text-align:center;font-size:12px;font-weight:800;color:#34644f;margin-top:8px}
-.hotel-reception-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 2px;border-bottom:1px solid #eee5d5}.hotel-reception-row:last-child{border-bottom:0}.hotel-reception-avatar{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#edf1e7;color:#3d664e;font-family:serif;font-weight:900}.hotel-reception-main b{display:block}.hotel-reception-main small{color:#82796f}.hotel-reception-score{text-align:right}.hotel-reception-score b{display:block;color:#2f644d;font-size:17px}.hotel-reception-score small{color:#8a7d6d}.hotel-empty{padding:24px 8px;text-align:center;color:#8b8175}
-.hotel-history-card{padding:0;overflow:hidden}.hotel-history-card summary{list-style:none;display:flex;justify-content:space-between;padding:15px 16px;font-weight:900;cursor:pointer;background:#fffaf1}.hotel-history-card summary::-webkit-details-marker{display:none}.hotel-history-card>div{padding:4px 14px 14px}.hotel-month-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:9px;padding:10px 0;border-bottom:1px solid #eee6d8;align-items:center}.hotel-month-row:last-child{border-bottom:0}.hotel-month-row span{font-weight:850}.hotel-month-row small{color:#857b70}.hotel-month-row b{color:#315f4b}
-@media(max-width:380px){.hotel-result-grid{grid-template-columns:1fr 22px 1fr}.hotel-invite-head{grid-template-columns:46px 1fr 38px}.hotel-invite-head .hotel-seal{width:42px;height:42px}.hotel-invite-head b{font-size:19px}}
 </style>
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
@@ -5520,37 +5469,12 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.78';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.63';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
 </script>
 
-<script id="v2571-hotel-invite-calendar-safe">
-(function(){
- const legacyActive=window.activeInvites;
- let inviteSelectedDate='';
- const todayKey=()=>dkey();
- const selectedDate=()=>inviteSelectedDate||todayKey();
- const summaryRows=()=>((window.db?.invites)||[]).filter(x=>!x.cancelled&&x.kind==='daily-parent-summary');
- const fractionFor=(parentId,date)=>{const rows=summaryRows().filter(x=>x.parentId===parentId&&x.date===date);return {ok:rows.filter(x=>x.campaign===true).length,total:rows.length}};
- const aggregate=(parentId,prefix)=>{const rows=summaryRows().filter(x=>(!parentId||x.parentId===parentId)&&String(x.date||'').startsWith(prefix));const ok=rows.filter(x=>x.campaign===true).length;return {ok,total:rows.length,rate:rows.length?ok/rows.length*100:0}};
- const dateText=(date)=>String(date||'').replaceAll('-','/');
- const isToday=(date)=>date===todayKey();
- function setInviteDateUI(){const date=selectedDate(),input=document.getElementById('inviteHotelDateInput'),todayBtn=document.getElementById('inviteTodayButton'),label=document.getElementById('inviteHotelDateLabel');if(label)label.textContent='📅 '+dateText(date);if(input){input.max=todayKey();input.value=date}if(todayBtn)todayBtn.hidden=isToday(date);const title=document.getElementById('inviteCardTitle');if(title)title.textContent=isToday(date)?'本日の招待結果を記録':`${dateText(date)} の招待結果を記録`;const list=document.getElementById('inviteListTitle');if(list)list.textContent=isToday(date)?'本日の受付一覧':`${dateText(date)} の受付一覧`}
- window.openInviteCalendar=function(){const input=document.getElementById('inviteHotelDateInput');if(!input)return;input.max=todayKey();try{input.showPicker?input.showPicker():input.click()}catch(_){input.click()}};
- window.changeInviteSummaryDate=function(value){const v=String(value||'').trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return;if(v>todayKey()){toast('未来の日付は選べません');return}inviteSelectedDate=v;setInviteDateUI();const msg=document.getElementById('inviteRegisterMessage');if(msg)msg.textContent='';renderInviteReception()};
- window.updateHotelInvitePreview=function(){const ok=Math.max(0,Number(document.getElementById('inviteSuccessCount')?.value||0)),total=Math.max(0,Number(document.getElementById('inviteTotalCount')?.value||0));document.getElementById('inviteHotelRate').textContent=total?percentText(ok/total*100):'—';document.getElementById('inviteHotelFraction').textContent=total?`${ok}/${total}（成功 / 招待）`:'成功数 / 招待数'};
- window.openInviteDetail=function(){inviteSelectedDate=todayKey();const sel=document.getElementById('inviteParentSelect');if(sel)sel.innerHTML='<option value="">親機を選択してください</option>'+inviteParents().map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('');document.getElementById('inviteSuccessCount').value='';document.getElementById('inviteTotalCount').value='';document.getElementById('inviteRegisterMessage').textContent='';setInviteDateUI();updateHotelInvitePreview();renderInviteReception();const ov=document.getElementById('inviteOverlay');ov.classList.add('show');ov.setAttribute('aria-hidden','false');const sh=ov.querySelector('.hotel-invite-sheet');if(sh)sh.scrollTop=0};
- window.saveInviteSummary=function(){const parentId=document.getElementById('inviteParentSelect')?.value||'',ok=Number(document.getElementById('inviteSuccessCount')?.value),total=Number(document.getElementById('inviteTotalCount')?.value),date=selectedDate();if(!parentId){toast('親機を選んでください');return}if(!Number.isInteger(ok)||!Number.isInteger(total)||ok<0||total<0){toast('成功数と招待数を正しく入力してください');return}if(ok>total){toast('成功数は招待数以下にしてください');return}if(date>todayKey()){toast('未来の日付には記録できません');return}if(total===0&&!confirm('0/0として記録しますか？'))return;db.invites=db.invites||[];db.invites.forEach(x=>{if(x.kind==='daily-parent-summary'&&x.parentId===parentId&&x.date===date&&!x.cancelled){x.cancelled=true;x.cancelledAt=Date.now()}});const batch=uid();for(let i=0;i<total;i++)db.invites.push({id:uid(),kind:'daily-parent-summary',batchId:batch,parentId,date,campaign:i<ok,timestamp:Date.now()+i});persist();document.getElementById('inviteRegisterMessage').textContent=`${db.devices.find(x=>x.id===parentId)?.name||'親機'} を ${dateText(date)}・${ok}/${total}・成功率 ${total?percentText(ok/total*100):'—'} で記録しました`;toast('招待結果を記録しました');renderInviteReception();renderHome()};
- window.renderInviteReception=function(){const date=selectedDate(),month=date.slice(0,7),year=date.slice(0,4),parents=inviteParents();setInviteDateUI();const dateRows=parents.map(p=>({p,...fractionFor(p.id,date)})).filter(x=>x.total>0);document.getElementById('inviteTodayReceptionList').innerHTML=dateRows.length?dateRows.map(x=>`<div class="hotel-reception-row"><div class="hotel-reception-avatar">${esc((x.p.name||'?').slice(0,1))}</div><div class="hotel-reception-main"><b>${esc(x.p.name)}</b><small>${isToday(date)?'本日の受付':dateText(date)+' の受付'}</small></div><div class="hotel-reception-score"><b>${x.ok}/${x.total}</b><small>成功率 ${percentText(x.ok/x.total*100)}</small></div></div>`).join(''):`<div class="hotel-empty">${isToday(date)?'本日':dateText(date)}の記録はまだありません</div>`;const monthRows=parents.map(p=>({p,...aggregate(p.id,month)})).filter(x=>x.total>0).sort((a,b)=>b.rate-a.rate||b.total-a.total);document.getElementById('inviteMonthTotal').textContent=aggregate('',month).total+'件';document.getElementById('inviteMonthList').innerHTML=monthRows.length?monthRows.map(x=>`<div class="hotel-month-row"><span>${esc(x.p.name)}</span><small>${x.ok}/${x.total}</small><b>${percentText(x.rate)}</b></div>`).join(''):'<div class="hotel-empty">この月の記録はありません</div>';const yearTotal=aggregate('',year);document.getElementById('inviteYearTotal').textContent=yearTotal.total+'件';let months=[];for(let m=1;m<=12;m++){const key=`${year}-${String(m).padStart(2,'0')}`,a=aggregate('',key);if(a.total||m===Number(date.slice(5,7)))months.push({m,...a})}document.getElementById('inviteYearList').innerHTML=months.map(x=>`<div class="hotel-month-row"><span>${x.m}月</span><small>${x.ok}/${x.total}</small><b>${x.total?percentText(x.rate):'—'}</b></div>`).join('')};
- window.renderInviteDetail=window.renderInviteReception;
- const oldInsight=window.renderDeviceInviteInsight;
- window.renderDeviceInviteInsight=function(d){const box=document.getElementById('deviceInviteInsight');if(!box)return;if((d.type||'normal')==='parent'){box.innerHTML=`<div class="parent-strength-card"><b>招待成功率</b><div class="parent-strength-tabs"><button class="active" onclick="renderParentStrength('${d.id}','month',this)">今月</button><button onclick="renderParentStrength('${d.id}','today',this)">今日</button><button onclick="renderParentStrength('${d.id}','year',this)">今年</button><button onclick="renderParentStrength('${d.id}','all',this)">全期間</button></div><div id="parentStrengthDynamic"></div></div>`;renderParentStrength(d.id,'month');return}if(oldInsight)oldInsight(d)};
- window.renderParentStrength=function(parentId,mode='month',btn=null){const target=document.getElementById('parentStrengthDynamic');if(!target)return;document.querySelectorAll('.parent-strength-tabs button').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');const prefix=mode==='today'?dkey():mode==='month'?mkey():mode==='year'?ykey():'';const a=aggregate(parentId,prefix),month=mkey();const ranking=inviteParents().map(p=>({id:p.id,...aggregate(p.id,month)})).filter(x=>x.total>0).sort((x,y)=>y.rate-x.rate||y.total-x.total),rank=ranking.findIndex(x=>x.id===parentId)+1;target.innerHTML=`<div class="parent-strength-main"><div class="parent-strength-rate"><small>${mode==='today'?'今日':mode==='month'?'今月':mode==='year'?'今年':'全期間'}の成功率</small><b>${a.total?percentText(a.rate):'—'}</b></div><div class="parent-strength-counts"><span>招待 <b>${a.total}件</b></span><span>成功 <b>${a.ok}件</b></span><span>対象外 <b>${Math.max(0,a.total-a.ok)}件</b></span></div></div><div class="parent-strength-rank">🏆 今月の親機ランキング：${rank||'-'}位 / ${ranking.length}台中</div>`};
- document.addEventListener('DOMContentLoaded',()=>{const badge=document.getElementById('ddBuildBadge');if(badge)badge.textContent='Ver25.78'});
-})();
-</script>
 <script id="v2563-canonical-start-screen">
 // Always start from the original D&D❀TikTok home screen.
 window.addEventListener('DOMContentLoaded',()=>{

@@ -1,7 +1,7 @@
 {
   "name": "D&D❀TikTok",
   "short_name": "D&D❀TikTok",
-  "description": "D&D❀TikTok Ver25.65 safe member cleanup",
+  "description": "TikTok Lite端末管理アプリ",
   "lang": "ja-JP",
   "start_url": "./?build=2563",
   "scope": "./",
@@ -27,6 +27,5 @@
   "display_override": [
     "standalone",
     "minimal-ui"
-  ],
-  "version": "25.66"
+  ]
 }
