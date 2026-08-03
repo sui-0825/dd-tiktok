@@ -1,3 +1,8 @@
-D&D❀TikTok Ver25.68
+D&D TikTok Ver25.69 ホテル受付風・親機別招待まとめ入力
 
-Owner duplicate cleanup fix: after restoring this device as the approved owner, old duplicate registrations are deleted directly. Input, device, annual, backup, and cloud-sharing data are unchanged.
+- 親機をプルダウン選択
+- 1日の最後に成功数/招待数をまとめて入力
+- 成功率を自動計算
+- 今日・今月・年間集計
+- 親機の端末詳細にも成功率を表示
+- 既存の共有・入力・年間データは維持

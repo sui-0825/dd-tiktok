@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.68-owner-cleanup-fixed">
+<meta name="dd-build" content="25.69-hotel-invite-summary">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -2601,66 +2601,33 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
 </div>
 
 <div id="inviteOverlay" class="bulletin-overlay" aria-hidden="true">
-  <div class="bulletin-sheet invite-two-screen-sheet">
-    <div class="bulletin-sheet-head"><div><b id="inviteScreenTitle">🎟️ 招待登録</b><div class="sub" id="inviteScreenSub">削って当たりを確認するように、楽しく登録</div></div><button class="iconbtn" onclick="finishInviteSession(true)">×</button></div>
-    <div class="invite-screen-tabs" role="tablist" aria-label="招待画面切り替え">
-      <button id="inviteRegisterTab" class="active" type="button" onclick="setInviteScreen('register')">🎟️ 招待登録</button>
-      <button id="inviteManageTab" type="button" onclick="setInviteScreen('manage')">✨ 招待管理</button>
+  <div class="bulletin-sheet hotel-invite-sheet">
+    <div class="hotel-invite-head">
+      <div class="hotel-seal">♛</div>
+      <div><small>DAILY RECEPTION</small><b>招待受付</b><span>親機ごとに本日の招待結果をまとめて記録</span></div>
+      <button class="iconbtn" onclick="closeOverlay('inviteOverlay')">×</button>
     </div>
-    <section id="inviteRegisterScreen" class="invite-screen active">
-    <div class="invite-console"><div class="scratch-marquee"><span>★</span><b>LUCKY INVITE SCRATCH</b><span>★</span></div>
-      <div class="invite-topline">
-        <div class="invite-parent-panel">
-          <div id="inviteParentLock" class="invite-parent-lock empty"><span>🎫 親機を選んでスタート</span><small>READY</small></div>
-          <label for="inviteParentSelect">今回のくじ売り場（親機）</label>
-          <select id="inviteParentSelect" class="invite-parent-select" onchange="lockInviteParent(this.value)"><option value="">親機を選択</option></select>
-        </div>
-        <div class="invite-success-mini"><small>今月の成功率</small><b id="inviteLiveRate">—</b><span id="inviteLiveCount">親機を選択</span></div>
+    <div class="hotel-date-pill" id="inviteHotelDateLabel">—</div>
+    <section class="hotel-checkin-card">
+      <div class="hotel-card-title"><span>🛎️</span><div><b>本日の招待結果を記録</b><small>端末ごとではなく、親機（代表）ごとに入力します</small></div></div>
+      <div class="hotel-field"><label for="inviteParentSelect">代表者名 / 親機名</label><select id="inviteParentSelect"><option value="">親機を選択してください</option></select></div>
+      <div class="hotel-result-grid">
+        <div class="hotel-field"><label for="inviteSuccessCount">成功数</label><input id="inviteSuccessCount" type="number" inputmode="numeric" min="0" placeholder="4" oninput="updateHotelInvitePreview()"></div>
+        <div class="hotel-slash">／</div>
+        <div class="hotel-field"><label for="inviteTotalCount">招待数</label><input id="inviteTotalCount" type="number" inputmode="numeric" min="0" placeholder="5" oninput="updateHotelInvitePreview()"></div>
       </div>
-      <div class="invite-meta-row">
-        <div class="invite-device-panel"><label for="inviteDeviceSearch">チケット番号（端末）</label><input id="inviteDeviceSearch" class="bulletin-input" placeholder="例 301" inputmode="numeric" enterkeyhint="done" autocomplete="off" autocorrect="off" spellcheck="false"></div>
-        <div class="invite-date-mini"><label for="inviteDate">招待日</label><div class="date-shell"><input id="inviteDate" type="date"></div></div>
-      </div>
-      <div class="invite-judgement-label"><span>銀のスクラッチ</span><small>どちらかをタップして結果を決定</small></div>
-      <div class="invite-campaign-buttons">
-        <button id="campaignSuccessBtn" class="success" type="button" onclick="setInviteCampaign(true)"><span class="scratch-foil" aria-hidden="true"></span><span class="invite-result-icon">🎯</span><span>対象</span><span class="invite-result-sub">当たり！</span></button>
-        <button id="campaignFailBtn" class="fail" type="button" onclick="setInviteCampaign(false)"><span class="scratch-foil" aria-hidden="true"></span><span class="invite-result-icon">✕</span><span>対象外</span><span class="invite-result-sub">はずれ</span></button>
-      </div>
-      <div class="invite-action-dock"><button id="inviteScratchRegisterBtn" class="register" onclick="addInvite()">🎟️ 削って登録する！</button><button class="finish" onclick="finishInviteSession(false)">親機終了</button></div>
-      <div id="inviteRegisterMessage" class="invite-register-message"></div>
-    </div>
-</section>
-    <section id="inviteManageScreen" class="invite-screen">
-      <div class="scratch-summary-banner"><div class="scratch-summary-title"><span>MONTHLY LUCKY BOARD</span>✨ 今月のくじ結果</div><div class="scratch-summary-kpis"><div><small>対象</small><b id="inviteSummaryOk">0</b><span>件</span></div><div><small>対象外</small><b id="inviteSummaryNg">0</b><span>件</span></div><div><small>成功率</small><b id="inviteSummaryRate">—</b></div></div></div>
-      <div class="invite-parent-picker ticket-panel">
-        <label for="inviteManageParentSelect"><span>🎟️ 詳細を見る親機</span><small>親機を選ぶと結果を絞り込み</small></label>
-        <select id="inviteManageParentSelect" onchange="setInviteParentFilter(this.value)"><option value="">すべての親機</option></select>
-        <div class="invite-parent-picker-note">親機カードをタップすると、日付ごとの招待履歴が開きます。</div>
-      </div>
-      <div id="inviteFilterSummary" class="invite-filter-summary"><span>すべての親機を表示中</span><span>🌱</span></div>
-    <details id="inviteMonthDetails" class="invite-more ticket-panel" open>
-      <summary><span>📋 今月の招待詳細を見る</span><span id="inviteMonthTotal" class="count-pill">0件</span></summary>
-      <div class="invite-more-body">
-        <div class="invite-detail-switch" role="tablist" aria-label="招待詳細の表示方法">
-          <button id="inviteViewParentBtn" class="active" type="button" onclick="setInviteMonthView('parent')">🎟️ 親機別</button>
-          <button id="inviteViewDateBtn" type="button" onclick="setInviteMonthView('date')">🗓️ 日付別</button>
-        </div>
-        <div id="inviteMonthViewHint" class="invite-view-hint">親機をタップすると、その親機で招待した端末まで見られます</div>
-        <div id="inviteMonthList" class="compact-history"></div>
-      </div>
-    </details>
-    <details id="inviteYearDetails" class="invite-more ticket-panel">
-      <summary><span>📊 今年の月別サマリーを見る</span><span id="inviteYearTotal" class="count-pill">0件</span></summary>
-      <div class="invite-more-body"><div id="inviteYearList"></div></div>
-    </details>
+      <div class="hotel-helper">例：成功4件・招待5件 → 4/5</div>
+      <div class="hotel-rate-badge"><small>成功率（自動計算）</small><b id="inviteHotelRate">—</b><span id="inviteHotelFraction">成功数 / 招待数</span></div>
+      <button class="hotel-register-btn" type="button" onclick="saveInviteSummary()">🛎️ 記録する</button>
+      <div id="inviteRegisterMessage" class="hotel-message"></div>
     </section>
+    <section class="hotel-list-card">
+      <div class="hotel-list-title"><span>🔑</span><div><b>本日の受付一覧</b><small>親機ごとの招待結果サマリー</small></div></div>
+      <div id="inviteTodayReceptionList"></div>
+    </section>
+    <details class="hotel-history-card" open><summary>今月の親機別サマリー <span id="inviteMonthTotal">0件</span></summary><div id="inviteMonthList"></div></details>
+    <details class="hotel-history-card"><summary>今年の月別サマリー <span id="inviteYearTotal">0件</span></summary><div id="inviteYearList"></div></details>
   </div>
-
-    <div id="inviteKeyboardBar" class="invite-keyboard-bar" aria-label="招待入力中の操作">
-      <button id="quickCampaignSuccess" class="quick-success" type="button" onclick="setInviteCampaign(true)">🎯 対象</button>
-      <button id="quickCampaignFail" class="quick-fail" type="button" onclick="setInviteCampaign(false)">✕ 対象外</button>
-      <button class="quick-register" type="button" onclick="addInvite()">🌿 登録する</button>
-    </div>
 </div>
 <div id="inviteTicketOverlay" class="invite-ticket-overlay" aria-hidden="true" onclick="closeInviteTicket(event)">
   <div class="invite-ticket-card" role="dialog" aria-modal="true">
@@ -5487,6 +5454,20 @@ const _goV17=window.go;window.go=function(id){if(id==='admin'){document.querySel
   .gear-menu-backdrop > .gear-menu-sheet,
   .invite-ticket-overlay > .invite-ticket-card{max-height:calc(100vh - 28px) !important}
 }
+
+/* ===== Ver25.69 ホテル受付風・親機別招待まとめ入力 ===== */
+#inviteOverlay .hotel-invite-sheet{max-width:680px;background:linear-gradient(180deg,#fffdf8,#f7f1e7);color:#3c352d;padding:0 16px 28px!important;border:1px solid #d8bd78;box-shadow:0 24px 70px rgba(54,43,25,.28);overflow:auto}
+.hotel-invite-head{display:grid;grid-template-columns:54px 1fr 42px;align-items:center;gap:12px;margin:0 -16px 12px;padding:15px 16px;background:linear-gradient(145deg,#102f4a,#183c58);color:#fff;border-bottom:2px solid #d7b45d;position:sticky;top:0;z-index:20}.hotel-invite-head .hotel-seal{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(145deg,#4b356b,#2c214f);border:2px solid #d8b85f;color:#f4d67e;font-size:23px}.hotel-invite-head small{display:block;color:#e9cf8b;font-size:9px;letter-spacing:.18em;font-weight:900}.hotel-invite-head b{display:block;font-family:serif;font-size:22px}.hotel-invite-head span{display:block;color:#d7e0e7;font-size:11px;margin-top:2px}.hotel-invite-head .iconbtn{color:#fff;background:rgba(255,255,255,.08)}
+.hotel-date-pill{width:max-content;margin:12px 0 10px auto;padding:8px 13px;border-radius:999px;background:#edf0e8;border:1px solid #d7ddcf;color:#315644;font-weight:850;font-size:12px}
+.hotel-checkin-card,.hotel-list-card,.hotel-history-card{background:rgba(255,255,255,.88);border:1px solid #dec47e;border-radius:23px;box-shadow:0 10px 26px rgba(91,72,34,.08);padding:16px;margin:12px 0}.hotel-checkin-card{background:linear-gradient(145deg,#fffdfa,#fbf3e4)}
+.hotel-card-title,.hotel-list-title{display:flex;align-items:center;gap:11px;padding-bottom:12px;border-bottom:1px solid #e9ddc5}.hotel-card-title>span,.hotel-list-title>span{font-size:26px}.hotel-card-title b,.hotel-list-title b{display:block;font-size:17px}.hotel-card-title small,.hotel-list-title small{display:block;color:#81776b;font-size:11px;margin-top:3px}
+.hotel-field{margin-top:14px}.hotel-field label{display:block;font-weight:900;font-size:13px;margin:0 0 7px 2px;color:#4a4138}.hotel-field select,.hotel-field input{width:100%;min-height:54px;border:1.5px solid #d8c8aa;border-radius:15px;background:#fff;padding:0 14px;font-size:18px;font-weight:850;color:#3b352e;outline:none}.hotel-field select:focus,.hotel-field input:focus{border-color:#376b55;box-shadow:0 0 0 3px rgba(55,107,85,.10)}
+.hotel-result-grid{display:grid;grid-template-columns:1fr 30px 1fr;gap:5px;align-items:end}.hotel-slash{font-size:30px;text-align:center;padding-bottom:10px;color:#9d8a68}.hotel-result-grid input{text-align:center;font-size:26px}.hotel-helper{font-size:11px;color:#877b6c;margin:7px 2px 0}
+.hotel-rate-badge{margin:15px 0;padding:14px;text-align:center;border:1px solid #d2dacb;border-radius:18px;background:linear-gradient(145deg,#f5f8f1,#edf3e9)}.hotel-rate-badge small{display:block;color:#657563;font-weight:800}.hotel-rate-badge b{display:block;font-size:38px;color:#285c47;line-height:1.1;margin:4px}.hotel-rate-badge span{font-size:11px;color:#7d8579}
+.hotel-register-btn{width:100%;min-height:56px;border:0;border-radius:16px;background:linear-gradient(135deg,#285f49,#1d4b39);color:#fff;font-size:18px;font-weight:900;box-shadow:0 8px 18px rgba(31,78,59,.22)}.hotel-register-btn:active{transform:scale(.985)}.hotel-message{min-height:18px;text-align:center;font-size:12px;font-weight:800;color:#34644f;margin-top:8px}
+.hotel-reception-row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:10px;align-items:center;padding:12px 2px;border-bottom:1px solid #eee5d5}.hotel-reception-row:last-child{border-bottom:0}.hotel-reception-avatar{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:#edf1e7;color:#3d664e;font-family:serif;font-weight:900}.hotel-reception-main b{display:block}.hotel-reception-main small{color:#82796f}.hotel-reception-score{text-align:right}.hotel-reception-score b{display:block;color:#2f644d;font-size:17px}.hotel-reception-score small{color:#8a7d6d}.hotel-empty{padding:24px 8px;text-align:center;color:#8b8175}
+.hotel-history-card{padding:0;overflow:hidden}.hotel-history-card summary{list-style:none;display:flex;justify-content:space-between;padding:15px 16px;font-weight:900;cursor:pointer;background:#fffaf1}.hotel-history-card summary::-webkit-details-marker{display:none}.hotel-history-card>div{padding:4px 14px 14px}.hotel-month-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:9px;padding:10px 0;border-bottom:1px solid #eee6d8;align-items:center}.hotel-month-row:last-child{border-bottom:0}.hotel-month-row span{font-weight:850}.hotel-month-row small{color:#857b70}.hotel-month-row b{color:#315f4b}
+@media(max-width:380px){.hotel-result-grid{grid-template-columns:1fr 22px 1fr}.hotel-invite-head{grid-template-columns:46px 1fr 38px}.hotel-invite-head .hotel-seal{width:42px;height:42px}.hotel-invite-head b{font-size:19px}}
 </style>
 <div id="cloudStatusPill" data-mode="local">端末内保存</div>
 
@@ -5528,12 +5509,29 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.68';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.69';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
 </script>
 
+<script id="v2569-hotel-invite-summary">
+(function(){
+ const legacyActive=window.activeInvites;
+ const summaryRows=()=>((window.db?.invites)||[]).filter(x=>!x.cancelled&&x.kind==='daily-parent-summary');
+ const fractionFor=(parentId,date)=>{const rows=summaryRows().filter(x=>x.parentId===parentId&&x.date===date);return {ok:rows.filter(x=>x.campaign===true).length,total:rows.length}};
+ const aggregate=(parentId,prefix)=>{const rows=summaryRows().filter(x=>(!parentId||x.parentId===parentId)&&String(x.date||'').startsWith(prefix));return {ok:rows.filter(x=>x.campaign===true).length,total:rows.length,rate:rows.length?rows.filter(x=>x.campaign===true).length/rows.length*100:0}};
+ window.updateHotelInvitePreview=function(){const ok=Math.max(0,Number(document.getElementById('inviteSuccessCount')?.value||0)),total=Math.max(0,Number(document.getElementById('inviteTotalCount')?.value||0));document.getElementById('inviteHotelRate').textContent=total?percentText(ok/total*100):'—';document.getElementById('inviteHotelFraction').textContent=total?`${ok}/${total}（成功 / 招待）`:'成功数 / 招待数'};
+ window.openInviteDetail=function(){const date=dkey(),sel=document.getElementById('inviteParentSelect');if(sel)sel.innerHTML='<option value="">親機を選択してください</option>'+inviteParents().map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('');document.getElementById('inviteSuccessCount').value='';document.getElementById('inviteTotalCount').value='';document.getElementById('inviteHotelDateLabel').textContent='📅 '+date.replaceAll('-','/');document.getElementById('inviteRegisterMessage').textContent='';updateHotelInvitePreview();renderInviteReception();const ov=document.getElementById('inviteOverlay');ov.classList.add('show');ov.setAttribute('aria-hidden','false');const sh=ov.querySelector('.hotel-invite-sheet');if(sh)sh.scrollTop=0};
+ window.saveInviteSummary=function(){const parentId=document.getElementById('inviteParentSelect')?.value||'',ok=Number(document.getElementById('inviteSuccessCount')?.value),total=Number(document.getElementById('inviteTotalCount')?.value),date=dkey();if(!parentId){toast('親機を選んでください');return}if(!Number.isInteger(ok)||!Number.isInteger(total)||ok<0||total<0){toast('成功数と招待数を正しく入力してください');return}if(ok>total){toast('成功数は招待数以下にしてください');return}if(total===0&&!confirm('0/0として記録しますか？'))return;db.invites=db.invites||[];db.invites.forEach(x=>{if(x.kind==='daily-parent-summary'&&x.parentId===parentId&&x.date===date&&!x.cancelled){x.cancelled=true;x.cancelledAt=Date.now()}});const batch=uid();for(let i=0;i<total;i++)db.invites.push({id:uid(),kind:'daily-parent-summary',batchId:batch,parentId,date,campaign:i<ok,timestamp:Date.now()+i});persist();document.getElementById('inviteRegisterMessage').textContent=`${db.devices.find(x=>x.id===parentId)?.name||'親機'} を ${ok}/${total}・成功率 ${total?percentText(ok/total*100):'—'} で記録しました`;toast('本日の招待結果を記録しました');renderInviteReception();renderHome();};
+ window.renderInviteReception=function(){const today=dkey(),month=mkey(),year=ykey(),parents=inviteParents();const todayRows=parents.map(p=>({p,...fractionFor(p.id,today)})).filter(x=>x.total>0);document.getElementById('inviteTodayReceptionList').innerHTML=todayRows.length?todayRows.map(x=>`<div class="hotel-reception-row"><div class="hotel-reception-avatar">${esc((x.p.name||'?').slice(0,1))}</div><div class="hotel-reception-main"><b>${esc(x.p.name)}</b><small>本日の受付</small></div><div class="hotel-reception-score"><b>${x.ok}/${x.total}</b><small>成功率 ${percentText(x.ok/x.total*100)}</small></div></div>`).join(''):'<div class="hotel-empty">本日の記録はまだありません</div>';const monthRows=parents.map(p=>({p,...aggregate(p.id,month)})).filter(x=>x.total>0).sort((a,b)=>b.rate-a.rate||b.total-a.total);document.getElementById('inviteMonthTotal').textContent=aggregate('',month).total+'件';document.getElementById('inviteMonthList').innerHTML=monthRows.length?monthRows.map(x=>`<div class="hotel-month-row"><span>${esc(x.p.name)}</span><small>${x.ok}/${x.total}</small><b>${percentText(x.rate)}</b></div>`).join(''):'<div class="hotel-empty">今月の記録はありません</div>';const yearTotal=aggregate('',year);document.getElementById('inviteYearTotal').textContent=yearTotal.total+'件';let months=[];for(let m=1;m<=12;m++){const key=`${year}-${String(m).padStart(2,'0')}`,a=aggregate('',key);if(a.total||m===new Date().getMonth()+1)months.push({m,...a})}document.getElementById('inviteYearList').innerHTML=months.map(x=>`<div class="hotel-month-row"><span>${x.m}月</span><small>${x.ok}/${x.total}</small><b>${x.total?percentText(x.rate):'—'}</b></div>`).join('');};
+ window.renderInviteDetail=window.renderInviteReception;
+ const oldInsight=window.renderDeviceInviteInsight;
+ window.renderDeviceInviteInsight=function(d){const box=document.getElementById('deviceInviteInsight');if(!box)return;if((d.type||'normal')==='parent'){box.innerHTML=`<div class="parent-strength-card"><b>招待成功率</b><div class="parent-strength-tabs"><button class="active" onclick="renderParentStrength('${d.id}','month',this)">今月</button><button onclick="renderParentStrength('${d.id}','today',this)">今日</button><button onclick="renderParentStrength('${d.id}','year',this)">今年</button><button onclick="renderParentStrength('${d.id}','all',this)">全期間</button></div><div id="parentStrengthDynamic"></div></div>`;renderParentStrength(d.id,'month');return}if(oldInsight)oldInsight(d)};
+ window.renderParentStrength=function(parentId,mode='month',btn=null){const target=document.getElementById('parentStrengthDynamic');if(!target)return;document.querySelectorAll('.parent-strength-tabs button').forEach(b=>b.classList.remove('active'));if(btn)btn.classList.add('active');const prefix=mode==='today'?dkey():mode==='month'?mkey():mode==='year'?ykey():'';const a=aggregate(parentId,prefix);const month=mkey();const ranking=inviteParents().map(p=>({id:p.id,...aggregate(p.id,month)})).filter(x=>x.total>0).sort((x,y)=>y.rate-x.rate||y.total-x.total),rank=ranking.findIndex(x=>x.id===parentId)+1;target.innerHTML=`<div class="parent-strength-main"><div class="parent-strength-rate"><small>${mode==='today'?'今日':mode==='month'?'今月':mode==='year'?'今年':'全期間'}の成功率</small><b>${a.total?percentText(a.rate):'—'}</b></div><div class="parent-strength-counts"><span>招待 <b>${a.total}件</b></span><span>成功 <b>${a.ok}件</b></span><span>対象外 <b>${Math.max(0,a.total-a.ok)}件</b></span></div></div><div class="parent-strength-rank">🏆 今月の親機ランキング：${rank||'-'}位 / ${ranking.length}台中</div>`};
+ document.addEventListener('DOMContentLoaded',()=>{const badge=document.getElementById('ddBuildBadge');if(badge)badge.textContent='Ver25.69'});
+})();
+</script>
 <script id="v2563-canonical-start-screen">
 // Always start from the original D&D❀TikTok home screen.
 window.addEventListener('DOMContentLoaded',()=>{
