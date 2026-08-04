@@ -1,6 +1,5 @@
-D&D TikTok Ver25.86 one-time parent bootstrap + delta sharing
+D&D❀TikTok Ver25.87 hotel invite UI on stable Ver25.86 sharing
 
-- Devices with complete local data skip the parent download.
-- Empty/new devices download the cloud parent snapshot once, then use delta sharing only.
-- Entry add/edit/delete uses app_entry_records.
-- Device and invitation metadata uses app_meta_state.
+- Sharing engine and backend configuration are byte-identical to Ver25.86.
+- Only the invite overlay UI and its display/input adapter were restored from Ver25.71.
+- Number, device, invite delta sharing and one-time bootstrap remain Ver25.86.
