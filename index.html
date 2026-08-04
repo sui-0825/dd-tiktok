@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="dd-build" content="25.88-invite-input-clear-stable-share">
+<meta name="dd-build" content="25.89-invite-resend-stable-share">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#f6f0e6">
 <meta name="application-name" content="D&D❀TikTok">
@@ -2623,6 +2623,7 @@ html[data-owner-recovered="1"] #accessGate{display:none!important}
       <div class="hotel-rate-badge"><small>成功率（自動計算）</small><b id="inviteHotelRate">—</b><span id="inviteHotelFraction">成功数 / 招待数</span></div>
       <button class="hotel-register-btn" type="button" onclick="saveInviteSummary()">🛎️ 記録する</button>
       <div id="inviteRegisterMessage" class="hotel-message"></div>
+      <button class="hotel-today-btn" id="inviteResendButton" type="button" onclick="retrySavedInviteShare()" style="width:100%;margin-top:10px">保存済みの招待を共有へ再送</button>
     </section>
     <section class="hotel-list-card">
       <div class="hotel-list-title"><span>🔑</span><div><b id="inviteListTitle">本日の受付一覧</b><small>親機ごとの招待結果サマリー</small></div></div>
@@ -5455,7 +5456,7 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
   removeOldRecovery();
   document.addEventListener('DOMContentLoaded', removeOldRecovery, {once:true});
   const badge=document.createElement('div');
-  badge.id='ddBuildBadge'; badge.textContent='Ver25.88';
+  badge.id='ddBuildBadge'; badge.textContent='Ver25.89';
   badge.style.cssText='position:fixed;left:8px;bottom:8px;z-index:40000;background:#173c55;color:#fff;border-radius:999px;padding:4px 8px;font:800 10px system-ui;opacity:.82;pointer-events:none';
   document.addEventListener('DOMContentLoaded',()=>document.body.appendChild(badge),{once:true});
 })();
@@ -5477,6 +5478,24 @@ let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=docu
  window.changeInviteSummaryDate=function(value){const v=String(value||'').trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return;if(v>todayKey()){toast('未来の日付は選べません');return}inviteSelectedDate=v;setInviteDateUI();const msg=document.getElementById('inviteRegisterMessage');if(msg)msg.textContent='';renderInviteReception()};
  window.updateHotelInvitePreview=function(){const ok=Math.max(0,Number(document.getElementById('inviteSuccessCount')?.value||0)),total=Math.max(0,Number(document.getElementById('inviteTotalCount')?.value||0));document.getElementById('inviteHotelRate').textContent=total?percentText(ok/total*100):'—';document.getElementById('inviteHotelFraction').textContent=total?`${ok}/${total}（成功 / 招待）`:'成功数 / 招待数'};
  window.openInviteDetail=function(){inviteSelectedDate=todayKey();const sel=document.getElementById('inviteParentSelect');if(sel)sel.innerHTML='<option value="">親機を選択してください</option>'+inviteParents().map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('');document.getElementById('inviteSuccessCount').value='';document.getElementById('inviteTotalCount').value='';document.getElementById('inviteRegisterMessage').textContent='';setInviteDateUI();updateHotelInvitePreview();renderInviteReception();const ov=document.getElementById('inviteOverlay');ov.classList.add('show');ov.setAttribute('aria-hidden','false');const sh=ov.querySelector('.hotel-invite-sheet');if(sh)sh.scrollTop=0};
+ window.retrySavedInviteShare=async function(){
+  const btn=document.getElementById('inviteResendButton');
+  if(!window.DDCloud?.pushMeta){toast('共有の準備ができていません');return}
+  if(btn){btn.disabled=true;btn.textContent='共有へ再送中…'}
+  try{
+    const result=await window.DDCloud.pushMeta();
+    if(!result?.ok)throw new Error(result?.reason||'共有保存に失敗しました');
+    const msg=document.getElementById('inviteRegisterMessage');
+    if(msg)msg.textContent='保存済みの招待を共有へ再送しました';
+    toast('保存済みの招待を共有へ再送しました');
+  }catch(e){
+    const msg=document.getElementById('inviteRegisterMessage');
+    if(msg)msg.textContent='再送に失敗しました：'+(e?.message||e);
+    toast('招待の再送に失敗しました');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='保存済みの招待を共有へ再送'}
+  }
+};
  window.saveInviteSummary=function(){const parentId=document.getElementById('inviteParentSelect')?.value||'',ok=Number(document.getElementById('inviteSuccessCount')?.value),total=Number(document.getElementById('inviteTotalCount')?.value),date=selectedDate();if(!parentId){toast('親機を選んでください');return}if(!Number.isInteger(ok)||!Number.isInteger(total)||ok<0||total<0){toast('成功数と招待数を正しく入力してください');return}if(ok>total){toast('成功数は招待数以下にしてください');return}if(date>todayKey()){toast('未来の日付には記録できません');return}if(total===0&&!confirm('0/0として記録しますか？'))return;db.invites=db.invites||[];db.invites.forEach(x=>{if(x.kind==='daily-parent-summary'&&x.parentId===parentId&&x.date===date&&!x.cancelled){x.cancelled=true;x.cancelledAt=Date.now()}});const batch=uid();for(let i=0;i<total;i++)db.invites.push({id:uid(),kind:'daily-parent-summary',batchId:batch,parentId,date,campaign:i<ok,timestamp:Date.now()+i});persist();document.getElementById('inviteRegisterMessage').textContent=`${db.devices.find(x=>x.id===parentId)?.name||'親機'} を ${dateText(date)}・${ok}/${total}・成功率 ${total?percentText(ok/total*100):'—'} で記録しました`;document.getElementById('inviteSuccessCount').value='';document.getElementById('inviteTotalCount').value='';updateHotelInvitePreview();toast('招待結果を記録しました');renderInviteReception();renderHome()};
  window.renderInviteReception=function(){const date=selectedDate(),month=date.slice(0,7),year=date.slice(0,4),parents=inviteParents();setInviteDateUI();const dateRows=parents.map(p=>({p,...fractionFor(p.id,date)})).filter(x=>x.total>0);document.getElementById('inviteTodayReceptionList').innerHTML=dateRows.length?dateRows.map(x=>`<div class="hotel-reception-row"><div class="hotel-reception-avatar">${esc((x.p.name||'?').slice(0,1))}</div><div class="hotel-reception-main"><b>${esc(x.p.name)}</b><small>${isToday(date)?'本日の受付':dateText(date)+' の受付'}</small></div><div class="hotel-reception-score"><b>${x.ok}/${x.total}</b><small>成功率 ${percentText(x.ok/x.total*100)}</small></div></div>`).join(''):`<div class="hotel-empty">${isToday(date)?'本日':dateText(date)}の記録はまだありません</div>`;const monthRows=parents.map(p=>({p,...aggregate(p.id,month)})).filter(x=>x.total>0).sort((a,b)=>b.rate-a.rate||b.total-a.total);document.getElementById('inviteMonthTotal').textContent=aggregate('',month).total+'件';document.getElementById('inviteMonthList').innerHTML=monthRows.length?monthRows.map(x=>`<div class="hotel-month-row"><span>${esc(x.p.name)}</span><small>${x.ok}/${x.total}</small><b>${percentText(x.rate)}</b></div>`).join(''):'<div class="hotel-empty">この月の記録はありません</div>';const yearTotal=aggregate('',year);document.getElementById('inviteYearTotal').textContent=yearTotal.total+'件';let months=[];for(let m=1;m<=12;m++){const key=`${year}-${String(m).padStart(2,'0')}`,a=aggregate('',key);if(a.total||m===Number(date.slice(5,7)))months.push({m,...a})}document.getElementById('inviteYearList').innerHTML=months.map(x=>`<div class="hotel-month-row"><span>${x.m}月</span><small>${x.ok}/${x.total}</small><b>${x.total?percentText(x.rate):'—'}</b></div>`).join('')};
  window.renderInviteDetail=window.renderInviteReception;
