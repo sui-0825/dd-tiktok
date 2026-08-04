@@ -119,10 +119,12 @@ async function jsonFetch(url,options={}){
  }finally{clearTimeout(timer)}
 }
 function saveSession(d){try{localStorage.setItem(TOKEN_KEY,JSON.stringify({access_token:d.access_token,refresh_token:d.refresh_token||'',expires_at:d.expires_at||0,user:d.user}))}catch(_){}}
-function loadStoredSession(){try{const s=JSON.parse(localStorage.getItem(TOKEN_KEY)||'null');if(s?.access_token&&s?.user?.id){state.accessToken=s.access_token;state.user=s.user;return true}}catch(_){}return false}
+function getStoredSession(){try{return JSON.parse(localStorage.getItem(TOKEN_KEY)||'null')}catch(_){return null}}
+function loadStoredSession(){try{const s=getStoredSession();if(s?.access_token&&s?.user?.id){state.accessToken=s.access_token;state.user=s.user;return true}}catch(_){}return false}
+async function refreshSession(){const current=getStoredSession();if(!current?.refresh_token)throw new Error('再認証情報がありません');const d=await jsonFetch(api('/auth/v1/token?grant_type=refresh_token'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:current.refresh_token}),timeoutMs:20000});if(!d?.access_token||!d?.user?.id)throw new Error('認証更新に失敗しました');state.accessToken=d.access_token;state.user=d.user;saveSession(d);addDiag('AUTH_REFRESH_OK',d.user.id);return d}
 function clearSession(){try{localStorage.removeItem(TOKEN_KEY)}catch(_){}state.accessToken='';state.user=null}
 async function ensureAuth(){addDiag('AUTH_START',loadStoredSession()?'stored-session':'new-anonymous');setStatus('認証を確認中…','cloud','','auth-check');if(loadStoredSession()){try{state.user=await jsonFetch(api('/auth/v1/user'),{headers:authHeaders()});return state.user}catch(_){clearSession()}}setStatus('匿名ログイン中…','cloud','','auth-anonymous');let d;try{d=await jsonFetch(api('/auth/v1/signup'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:JSON.stringify({data:{app:'dd-tiktok'}})})}catch(e){d=await jsonFetch(api('/auth/v1/signup'),{method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:'{}'}).catch(()=>{throw e})}if(!d?.access_token||!d?.user?.id){addDiag('AUTH_FAIL','access_token/user_id missing');throw new Error('匿名ログインに失敗しました')}state.accessToken=d.access_token;state.user=d.user;saveSession(d);addDiag('AUTH_OK',d.user.id);return d.user}
-async function rest(path,options={}){if(!state.accessToken)throw new Error('認証トークンがありません');return jsonFetch(api(`/rest/v1/${path}`),{...options,headers:{...authHeaders(),...(options.headers||{})}})}
+async function rest(path,options={}){if(!state.accessToken)throw new Error('認証トークンがありません');const request=()=>jsonFetch(api(`/rest/v1/${path}`),{...options,headers:{...authHeaders(),...(options.headers||{})}});try{return await request()}catch(e){const msg=String(e?.message||e);if(!/^401:/.test(msg)||!/JWT expired|token.*expired|expired.*token/i.test(msg))throw e;addDiag('AUTH_REFRESH_START',path);await refreshSession();return request()}}
 async function rpc(name,payload){return rest(`rpc/${name}`,{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(payload||{})})}
 async function verifyWorkspace(){addDiag('WORKSPACE_START',cfg.workspaceId||'未設定');setStatus('ワークスペース確認中…','cloud','','workspace');let rows=[];if(cfg.workspaceId)rows=await rest(`workspaces?id=eq.${encodeURIComponent(cfg.workspaceId)}&select=id,name&limit=1`);if(!Array.isArray(rows)||!rows[0]?.id)rows=await rest('workspaces?select=id,name&order=created_at.asc&limit=1');if(!Array.isArray(rows)||!rows[0]?.id)throw new Error('ワークスペースがありません');state.workspaceId=rows[0].id;addDiag('WORKSPACE_OK',state.workspaceId);return state.workspaceId}
 function hasOwnerEmergencyUnlock(){try{return localStorage.getItem(OWNER_UNLOCK_KEY)==='1'}catch(_){return false}}
@@ -286,7 +288,7 @@ async function requestAccess(displayName){
  return row;
 }
 function mergeSharedMembers(names=[]){if(!window.db||typeof window.db!=='object')return;const local=getLocalUserName();/* Ver25.22: 所属中の利用者一覧で置き換え、削除済みプロフィールを再混入させない */window.db.members=[...new Set([...names,local].map(v=>String(v||'').trim()).filter(Boolean))];window.db.currentUser=local||String(window.db.currentUser||'').trim()}
-const PARENT_BOOTSTRAP_KEY='dd_parent_bootstrap_once_v2586';
+const PARENT_BOOTSTRAP_KEY='dd_parent_bootstrap_once_v2590_recovery';
 async function bootstrapParentOnceIfNeeded(){
  if(state.accessStatus!=='approved'||!state.workspaceId||!window.db)return {ok:false,reason:'not_ready'};
  const localEntries=Array.isArray(window.db.entries)?window.db.entries.length:0;
@@ -479,6 +481,11 @@ async function restoreBackupSnapshot(payload){
    body:JSON.stringify({workspace_id:state.workspaceId,revision:next,payload:clean,updated_by:state.user.id,updated_at:committedAt}),timeoutMs:45000
   });
   state.revision=Number(Array.isArray(rows)&&rows[0]?.revision||next);
+  const metaPayload=typeof structuredClone==='function'?structuredClone(clean):JSON.parse(JSON.stringify(clean));
+  delete metaPayload.entries;delete metaPayload.currentUser;
+  const metaRows=await rest('app_meta_state?on_conflict=workspace_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({workspace_id:state.workspaceId,payload:metaPayload,updated_by:state.user.id,updated_at:committedAt}),timeoutMs:45000});
+  state.metaCursor=String(Array.isArray(metaRows)&&metaRows[0]?.updated_at||committedAt);
+  try{localStorage.setItem(META_CURSOR_KEY,state.metaCursor)}catch(_){}
   // 復元以前の1件同期ログを再読込すると、古い数字が復活・上書きされるためカーソルを復元確定時刻へ進める。
   state.entryCursor=String(Array.isArray(rows)&&rows[0]?.updated_at||committedAt);
   state.dirty=false;state.dirtySeq=0;state.recoveryProtected=false;
