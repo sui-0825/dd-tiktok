@@ -3792,7 +3792,7 @@ function cancelInvite(inviteId){
  if(!confirm(`この招待を取り消しますか？\n\n${label}\n\n招待件数から除外し、履歴には「取り消し済み」として残します。`))return;
  inv.cancelled=true;inv.cancelledAt=Date.now();
  const remain=activeInvites().filter(x=>x.deviceId===inv.deviceId).sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
- if(d){d.inviteDate=remain[0]?.date||'';const hasEntry=(db.entries||[]).some(e=>e.deviceId===d.id&&String(e.date||'')>=String(inv.date||''));if(!remain.length&&!hasEntry&&d.status==='active')d.status='inactive'}
+ if(d){d.updatedAt=Date.now();d.inviteDate=remain[0]?.date||'';const hasEntry=(db.entries||[]).some(e=>e.deviceId===d.id&&String(e.date||'')>=String(inv.date||''));if(!remain.length&&!hasEntry&&d.status==='active')d.status='inactive'}
  persist();renderInviteDetail();renderHome();updateInviteSessionUI();toast('招待を取り消しました');
 }
 function addInvite(){
@@ -3801,7 +3801,7 @@ function addInvite(){
  const norm=q.replace(/^端末/,'');const d=db.devices.find(x=>x.name===q||x.name===`端末${norm}`||String(x.name).includes(q));
  if(!d){toast('端末が見つかりません');return}if(d.type==='parent'){toast('親機は招待対象外です');return}if(d.id===inviteParentId){toast('同じ親機は登録できません');return}
  if(activeInvites().some(x=>x.deviceId===d.id&&x.date===date)){toast('この端末は同じ日に登録済みです');return}
- db.invites.push({id:uid(),deviceId:d.id,parentId:inviteParentId,campaign:inviteCampaignResult,date,timestamp:Date.now(),previousStatus:d.status||'inactive'});d.status='active';d.everActive=true;d.inviteDate=date;persist();
+ db.invites.push({id:uid(),deviceId:d.id,parentId:inviteParentId,campaign:inviteCampaignResult,date,timestamp:Date.now(),previousStatus:d.status||'inactive'});d.updatedAt=Date.now();d.status='active';d.everActive=true;d.inviteDate=date;persist();
  const parent=db.devices.find(x=>x.id===inviteParentId),savedResult=inviteCampaignResult;document.getElementById('inviteDeviceSearch').value='';document.getElementById('inviteRegisterMessage').textContent=`✨ ${d.name} のチケットを登録しました。${parent?.name||'親機'}は固定中です。`;launchInviteSparkles();inviteCampaignResult=null;updateInviteSessionUI();renderInviteDetail();renderHome();
 }
 function showInviteTicket(device,parent,result,date){
@@ -3892,9 +3892,14 @@ function previousMonthKey(key){
 function saveFinanceSettings(){
  const key=settingsMonthKey();
  db.finance=db.finance||{monthly:{},targets:{},initialInvestment:0};
+ const now=Date.now();
  db.finance.monthly[key]=Number(document.getElementById('settingMonthFee').value||0);
  db.finance.targets[key]=Number(document.getElementById('settingMonthTarget').value||0);
  db.finance.initialInvestment=Number(document.getElementById('settingInitialInvestment').value||0);
+ db._syncMeta=db._syncMeta||{};db._syncMeta.finance=db._syncMeta.finance||{};
+ db._syncMeta.finance.monthly={...(db._syncMeta.finance.monthly||{}),[key]:now};
+ db._syncMeta.finance.targets={...(db._syncMeta.finance.targets||{}),[key]:now};
+ db._syncMeta.finance.initialInvestment=now;
  persist();renderHome();renderFinanceSettings();toast(`${Number(key.slice(5,7))}月の収支設定を保存しました`);
 }
 function renderFinanceSettings(){
@@ -4375,7 +4380,7 @@ function saveDevice(){
  if(id){
   const target=db.devices.find(x=>x.id===id);
   if(target.status!==status)target.statusSince=dkey();
-  const wasParent=(target.type||'normal')==='parent';Object.assign(target,{name,reading,aliases,type,sim,status});if(type==='parent'&&!wasParent){ensureParentOrder();target.parentOrder=db.devices.filter(d=>(d.type||'normal')==='parent').length-1}else if(type!=='parent')delete target.parentOrder;
+  const wasParent=(target.type||'normal')==='parent';Object.assign(target,{name,reading,aliases,type,sim,status,updatedAt:Date.now()});if(type==='parent'&&!wasParent){ensureParentOrder();target.parentOrder=db.devices.filter(d=>(d.type||'normal')==='parent').length-1}else if(type!=='parent')delete target.parentOrder;
  }else {const nid=uid(),start=dkey(),parentOrder=type==='parent'?db.devices.filter(d=>(d.type||'normal')==='parent').length:undefined;db.devices.push({id:nid,name,reading,aliases,type,sim,status,parentOrder,createdAt:Date.now(),statusSince:start,generations:[{id:'gen1',number:1,startDate:start,endDate:'',reason:'初回登録',memo:'',sim}],currentGenerationId:'gen1'});}
  ensureParentOrder();persist();closeDeviceSheet();renderDevices();renderHome();if(document.getElementById('annual')?.classList.contains('active'))renderAnnual();toast('端末を保存しました');
 }
@@ -5438,7 +5443,7 @@ if ('serviceWorker' in navigator) {
 
 
 <script id="v141-cloud-ui">
-let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=document.getElementById('cloudStatusPill');if(!el)return;const d=e.detail||{};clearTimeout(ddCloudHideTimer);el.classList.remove('dd-cloud-hide');el.textContent=d.status||'端末内保存';el.dataset.mode=d.mode||'local';el.title=d.error||'';el.onclick=async()=>{el.textContent='認証IDを確認中…';try{const a=await window.DDCloud?.inspectAuthIdentity?.();const rows=Array.isArray(a?.membershipRows)?a.membershipRows:[];const profiles=Array.isArray(a?.profileRows)?a.profileRows:[];alert('認証・承認診断 Ver25.90\n\n【直近の共有状態】\n直近エラー: '+(a?.lastError||'なし')+'\n状態: '+(a?.stage||'-')+' / '+(a?.status||'-')+'\n\n【認証情報】\nアプリuserId: '+(a?.appUserId||'-')+'\nJWT sub: '+(a?.jwtSub||'-')+'\nJWT role: '+(a?.jwtRole||'-')+'\nJWT期限: '+(a?.jwtExp?new Date(a.jwtExp*1000).toLocaleString():'-')+'\n\nWorkspace: '+(a?.workspaceId||'-')+'\n端末内権限: '+(a?.localRole||'-')+' / '+(a?.localAccessStatus||'-')+'\n\n承認行件数: '+rows.length+'\n承認行: '+(rows.length?JSON.stringify(rows,null,2):'なし')+'\n承認取得エラー: '+(a?.membershipError||'なし')+'\n\nプロフィール件数: '+profiles.length+'\nプロフィール: '+(profiles.length?JSON.stringify(profiles,null,2):'なし')+'\nプロフィール取得エラー: '+(a?.profileError||'なし')+'\n\n端末登録ID: '+(a?.deviceRegistrationId||'-'));return;const x=await window.DDCloud?.inspectConnection?.();const t=await window.DDCloud?.inspectTrackedEntry?.('Air2','2026-08-01');const fmt=(z)=>{const e=z?.entry;return '件数: '+(z?.count??0)+'\n記録: '+(e?('raw='+e.raw+' / input='+e.inputValue+' / 増加='+e.increase+' / PayPay='+e.profit+' / 未確定='+e.pending+' / operator='+e.operator):'見つかりません')+'\n8/1集計: 増加='+Number(z?.totals?.increase||0)+' / PayPay='+Number(z?.totals?.profit||0)+' / 未確定='+Number(z?.totals?.pending||0)+' / 件数='+Number(z?.totals?.count||0)};alert('Air2・8月1日・431 追跡診断 Ver25.60\n\n【Android/iPhone端末内】\n'+fmt(t?.local)+'\n\n【クラウド本文】\n'+fmt(t?.remote)+'\n\n端末Revision: '+t.localRevision+' / クラウドRevision: '+t.remoteRevision+'\nクラウド更新: '+(t.remoteUpdatedAt||'-')+'\n\n--- 接続情報 ---\n接続先: '+(x.endpoint||'-')+'\n設定Workspace: '+(x.configuredWorkspaceId||'-')+'\n実際Workspace: '+(x.activeWorkspaceId||'-')+'\n\n端末Revision: '+x.localRevision+'\nクラウドRevision: '+x.remoteRevision+'\nクラウド更新: '+(x.remoteUpdatedAt||'-')+'\n\n端末台数: '+x.localDevices+' / クラウド: '+x.remoteDevices+'\n端末履歴: '+x.localEntries+' / クラウド: '+x.remoteEntries+'\n未送信: '+(x.dirty?'あり':'なし')+'\n利用者ID: '+(x.userId||'-')+'\n権限: '+(x.role||'-')+' / '+(x.accessStatus||'-')+'\n状態: '+(x.status||'-')+'\nエラー: '+(x.error||'なし'));}catch(err){const x=window.DDCloud?.getDiagnostics?.()||d;alert('接続先診断に失敗しました\n'+String(err?.message||err)+'\n\nWorkspace: '+(x.workspaceId||'-')+'\nRevision: '+(x.revision||0));}};if((d.mode||'')==='cloud'){ddCloudHideTimer=setTimeout(()=>el.classList.add('dd-cloud-hide'),2200);}});
+let ddCloudHideTimer;window.addEventListener('dd-cloud-status',e=>{const el=document.getElementById('cloudStatusPill');if(!el)return;const d=e.detail||{};clearTimeout(ddCloudHideTimer);el.classList.remove('dd-cloud-hide');el.textContent=d.status||'端末内保存';el.dataset.mode=d.mode||'local';el.title=d.error||'';el.onclick=async()=>{el.textContent='認証IDを確認中…';try{const a=await window.DDCloud?.inspectAuthIdentity?.();const rows=Array.isArray(a?.membershipRows)?a.membershipRows:[];const profiles=Array.isArray(a?.profileRows)?a.profileRows:[];alert('認証・承認診断 Ver25.92\n\n【直近の共有状態】\n直近エラー: '+(a?.lastError||'なし')+'\n状態: '+(a?.stage||'-')+' / '+(a?.status||'-')+'\n\n【認証情報】\nアプリuserId: '+(a?.appUserId||'-')+'\nJWT sub: '+(a?.jwtSub||'-')+'\nJWT role: '+(a?.jwtRole||'-')+'\nJWT期限: '+(a?.jwtExp?new Date(a.jwtExp*1000).toLocaleString():'-')+'\n\nWorkspace: '+(a?.workspaceId||'-')+'\n端末内権限: '+(a?.localRole||'-')+' / '+(a?.localAccessStatus||'-')+'\n\n承認行件数: '+rows.length+'\n承認行: '+(rows.length?JSON.stringify(rows,null,2):'なし')+'\n承認取得エラー: '+(a?.membershipError||'なし')+'\n\nプロフィール件数: '+profiles.length+'\nプロフィール: '+(profiles.length?JSON.stringify(profiles,null,2):'なし')+'\nプロフィール取得エラー: '+(a?.profileError||'なし')+'\n\n端末登録ID: '+(a?.deviceRegistrationId||'-'));return;const x=await window.DDCloud?.inspectConnection?.();const t=await window.DDCloud?.inspectTrackedEntry?.('Air2','2026-08-01');const fmt=(z)=>{const e=z?.entry;return '件数: '+(z?.count??0)+'\n記録: '+(e?('raw='+e.raw+' / input='+e.inputValue+' / 増加='+e.increase+' / PayPay='+e.profit+' / 未確定='+e.pending+' / operator='+e.operator):'見つかりません')+'\n8/1集計: 増加='+Number(z?.totals?.increase||0)+' / PayPay='+Number(z?.totals?.profit||0)+' / 未確定='+Number(z?.totals?.pending||0)+' / 件数='+Number(z?.totals?.count||0)};alert('Air2・8月1日・431 追跡診断 Ver25.60\n\n【Android/iPhone端末内】\n'+fmt(t?.local)+'\n\n【クラウド本文】\n'+fmt(t?.remote)+'\n\n端末Revision: '+t.localRevision+' / クラウドRevision: '+t.remoteRevision+'\nクラウド更新: '+(t.remoteUpdatedAt||'-')+'\n\n--- 接続情報 ---\n接続先: '+(x.endpoint||'-')+'\n設定Workspace: '+(x.configuredWorkspaceId||'-')+'\n実際Workspace: '+(x.activeWorkspaceId||'-')+'\n\n端末Revision: '+x.localRevision+'\nクラウドRevision: '+x.remoteRevision+'\nクラウド更新: '+(x.remoteUpdatedAt||'-')+'\n\n端末台数: '+x.localDevices+' / クラウド: '+x.remoteDevices+'\n端末履歴: '+x.localEntries+' / クラウド: '+x.remoteEntries+'\n未送信: '+(x.dirty?'あり':'なし')+'\n利用者ID: '+(x.userId||'-')+'\n権限: '+(x.role||'-')+' / '+(x.accessStatus||'-')+'\n状態: '+(x.status||'-')+'\nエラー: '+(x.error||'なし'));}catch(err){const x=window.DDCloud?.getDiagnostics?.()||d;alert('接続先診断に失敗しました\n'+String(err?.message||err)+'\n\nWorkspace: '+(x.workspaceId||'-')+'\nRevision: '+(x.revision||0));}};if((d.mode||'')==='cloud'){ddCloudHideTimer=setTimeout(()=>el.classList.add('dd-cloud-hide'),2200);}});
 </script>
 
 <!-- Ver25.4: 共同編集者はクラウド復元画面ではなく、通常のホテルチェックイン承認フローへ進みます。 -->
