@@ -1,12 +1,14 @@
-/* D&D❀TikTok Ver25.94 status sync repair; no automatic parent snapshot */
+/* D&D❀TikTok Ver25.96 free-plan egress reduction; status sync repair */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
 const TOKEN_KEY='dd_supabase_anon_session_v2', LOCAL_USER_KEY='dd_tiktok_local_user_v1', DEVICE_ID_KEY='dd_device_registration_id_v1', DEVICE_ACCOUNT_KEY='dd_device_bound_user_v1', OWNER_UNLOCK_KEY='dd_owner_emergency_unlock_v1', OWNER_FAIL_KEY='dd_owner_pin_fail_v1', DIRTY_KEY='dd_cloud_dirty_v25', DIRTY_SEQ_KEY='dd_cloud_dirty_seq_v25';
 const diag=[];
 const ENTRY_CURSOR_KEY='dd_entry_records_cursor_v2', META_CURSOR_KEY='dd_meta_cursor_v1';
+// Ver25.96: 無料枠を守るため、差分確認は20秒間隔。画面復帰時は即時確認し、連続focusは抑制する。
+const RECEIVE_INTERVAL_MS=20000, RECEIVE_IMMEDIATE_THROTTLE_MS=5000;
 function addDiag(step,detail=''){const row={time:new Date().toISOString(),step:String(step),detail:String(detail||'')};diag.push(row);if(diag.length>30)diag.shift();console.log('[DD DIAG]',row);return row}
-const state={entryCursor:'',metaCursor:'',mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,retryTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,receiveTimer:null,receiveBusy:false,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true,dirty:false,dirtySeq:0,pushingSeq:0};
+const state={entryCursor:'',metaCursor:'',mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,retryTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,receiveTimer:null,lastReceiveAt:0,receiveBusy:false,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true,dirty:false,dirtySeq:0,pushingSeq:0};
 const publicState=()=>({...state,syncTimer:undefined,retryTimer:undefined,presenceTimer:undefined,profileTimer:undefined,accessTimer:undefined,accessToken:undefined,user:state.user?{id:state.user.id}:null});
 
 function loadDirtyState(){try{state.dirty=localStorage.getItem(DIRTY_KEY)==='1';state.dirtySeq=Number(localStorage.getItem(DIRTY_SEQ_KEY)||0)}catch(_){state.dirty=false;state.dirtySeq=0}}
@@ -396,8 +398,9 @@ async function heartbeat(){
 function startPresence(){
  clearInterval(state.presenceTimer);clearInterval(state.profileTimer);
  heartbeat().catch(console.warn);
- state.presenceTimer=setInterval(()=>heartbeat().catch(console.warn),30000);
- state.profileTimer=setInterval(()=>pullProfilesSafe().catch(console.warn),20000);
+ // Ver25.96: ONLINE判定は120秒なので、60秒間隔でも表示精度を保ちながら通信を削減できる。
+ state.presenceTimer=setInterval(()=>heartbeat().catch(console.warn),60000);
+ state.profileTimer=setInterval(()=>pullProfilesSafe().catch(console.warn),60000);
 }
 function stopPresence(){clearInterval(state.presenceTimer);clearInterval(state.profileTimer);state.presenceTimer=null;state.profileTimer=null}
 // 画面へ戻った瞬間にONLINEを更新。バックグラウンド中は更新しない。
@@ -650,12 +653,20 @@ async function checkForRemoteUpdates(reason='timer'){
  // 数字はapp_entry_records、端末・招待はapp_meta_stateだけで受信する。
  return {ok:true,updated:false,revision:state.revision,reason:'legacy-parent-sync-disabled'};
 }
+async function runAutomaticReceive(reason='interval',force=false){
+ if(state.accessStatus!=='approved'||document.visibilityState==='hidden')return;
+ const now=Date.now();
+ if(!force&&now-Number(state.lastReceiveAt||0)<RECEIVE_IMMEDIATE_THROTTLE_MS)return;
+ state.lastReceiveAt=now;
+ await pullEntryRecords(reason);
+ await pullMeta();
+}
 function startAutomaticReceive(){
- clearInterval(state.receiveTimer);
  if(state.accessStatus!=='approved')return;
- const tick=async(reason='interval')=>{await pullEntryRecords(reason);await pullMeta()};
- tick('start').catch(console.warn);
- state.receiveTimer=setInterval(()=>tick('interval').catch(console.warn),3000);
+ // focus/pageshowが連続しても既存タイマーを作り直さず、余分な即時GETを発生させない。
+ if(state.receiveTimer){runAutomaticReceive('resume').catch(console.warn);return;}
+ runAutomaticReceive('start',true).catch(console.warn);
+ state.receiveTimer=setInterval(()=>runAutomaticReceive('interval',true).catch(console.warn),RECEIVE_INTERVAL_MS);
 }
 function stopAutomaticReceive(){clearInterval(state.receiveTimer);state.receiveTimer=null;}
 
@@ -836,7 +847,7 @@ async function inspectConnection(){
   error:String(state.lastError||'')
  };
 }
-window.DDCloud={state,isConfigured:configured,init,bootstrapParentOnceIfNeeded,pull,push,pushEntryById,deleteEntryById,pushMeta,pullMeta,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectAuthIdentity,inspectConnection,inspectTrackedEntry,async syncNow(){const a=await pushMeta();return a},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.94',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,bootstrapParentOnceIfNeeded,pull,push,pushEntryById,deleteEntryById,pushMeta,pullMeta,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectAuthIdentity,inspectConnection,inspectTrackedEntry,async syncNow(){const a=await pushMeta();return a},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.96',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);if(!window.DD_SKIP_AUTO_PUSH&&!state.applying){clearTimeout(state.metaTimer);state.metaTimer=setTimeout(()=>pushMeta().catch(console.warn),500)}return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
