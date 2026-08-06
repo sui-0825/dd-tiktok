@@ -1,0 +1,6 @@
+D&D❀TikTok Ver25.94
+
+- Ver25.93の稼働・待機同期修正を維持
+- backend-config.js / app-cloud-bridge.js の読込番号を2594へ更新
+- HTMLにキャッシュ抑止指定を追加
+- 表示バージョンをVer25.94へ統一
