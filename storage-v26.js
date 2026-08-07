@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver26.0 - IndexedDB safety layer
+/* D&D❀TikTok Ver25.97 / storage schema 26 - IndexedDB safety layer
    Existing synchronous localStorage behavior is preserved while a complete,
    asynchronous IndexedDB copy is maintained for recovery and future migration.
 */
@@ -52,10 +52,16 @@
 
   function buildPayload() {
     const source = (typeof compactDBForStorage === 'function') ? compactDBForStorage(db) : db;
+    let entryCursor='', metaCursor='';
+    try {
+      entryCursor = localStorage.getItem('dd_entry_records_cursor_v2') || '';
+      metaCursor = localStorage.getItem('dd_meta_cursor_v1') || '';
+    } catch (_) {}
     return {
       format: 'D&D_TIKTOK_IDB_SNAPSHOT',
       schemaVersion: 26,
       savedAt: new Date().toISOString(),
+      sync: { entryCursor, metaCursor },
       data: JSON.parse(JSON.stringify(source))
     };
   }
@@ -91,17 +97,28 @@
 
   async function recoverIfNeeded() {
     const hasLocalData = Array.isArray(window.db?.devices) && (db.devices.length > 0 || db.entries.length > 0);
-    if (hasLocalData) { queueMirror(20); return false; }
     try {
       const snapshot = await getSnapshot();
       const restored = snapshot?.data;
-      if (!restored || !Array.isArray(restored.devices) || !Array.isArray(restored.entries)) return false;
+      if (!restored || !Array.isArray(restored.devices) || !Array.isArray(restored.entries)) {
+        if (hasLocalData) queueMirror(20);
+        return false;
+      }
+      let localSavedAt = 0;
+      try { localSavedAt = Number(localStorage.getItem('dd_last_local_save_v25') || 0); } catch (_) {}
+      const idbSavedAt = Date.parse(snapshot?.savedAt || '') || 0;
+      // Ver25.97: localStorageが残っていても、容量超過前にIndexedDBへ保存した方が新しければそちらを採用。
+      if (hasLocalData && localSavedAt >= idbSavedAt) { queueMirror(20); return false; }
       db = restored;
       db.invites = Array.isArray(db.invites) ? db.invites : [];
       db.bulletins = Array.isArray(db.bulletins) ? db.bulletins : [];
       db.members = Array.isArray(db.members) ? db.members : [];
       db.finance = db.finance || { monthly: {}, targets: {}, initialInvestment: 0 };
       db.security = db.security || {};
+      try {
+        if (snapshot?.sync?.entryCursor) localStorage.setItem('dd_entry_records_cursor_v2', snapshot.sync.entryCursor);
+        if (snapshot?.sync?.metaCursor) localStorage.setItem('dd_meta_cursor_v1', snapshot.sync.metaCursor);
+      } catch (_) {}
       if (typeof recalculateStoredEntries === 'function') recalculateStoredEntries(db);
       originalPersist?.call(window);
       ['renderHome','renderDevices','renderAnnual','renderReport','renderInputMembers'].forEach(name => {

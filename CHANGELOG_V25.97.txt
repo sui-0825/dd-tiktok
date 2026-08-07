@@ -1,0 +1,19 @@
+D&D❀TikTok Ver25.97
+
+【起動・共有の安定化】
+- Supabase共有を正本のまま維持
+- iPhoneでlocalStorage容量超過時に前回データを削除しないよう修正
+- IndexedDB安全保存を本番読み込みへ追加し、最新の端末内キャッシュを次回起動時に即復元
+- IndexedDBへ入力差分カーソル／メタ差分カーソルも保存し、過去データの再取得を防止
+- クラウド初回受信・差分受信後もIndexedDBへ安全保存
+
+【更新反映】
+- backend-config.js / app-cloud-bridge.js / storage-v26.js の読込番号を2597へ更新
+- 表示バージョンをVer25.97へ統一
+- Service Workerは従来どおりキャッシュを保持せず解除
+
+【変更していないもの】
+- 入力・計算ルール
+- Supabase共有テーブル構成
+- 招待・端末管理ルール
+- バックアップ形式
