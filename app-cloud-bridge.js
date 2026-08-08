@@ -1,15 +1,15 @@
-/* D&D❀TikTok Ver25.99 multi-device safe durable delta sync */
+/* D&D❀TikTok Ver26.00 historical-gap repair + multi-device safe durable delta sync */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
 const TOKEN_KEY='dd_supabase_anon_session_v2', LOCAL_USER_KEY='dd_tiktok_local_user_v1', DEVICE_ID_KEY='dd_device_registration_id_v1', DEVICE_ACCOUNT_KEY='dd_device_bound_user_v1', OWNER_UNLOCK_KEY='dd_owner_emergency_unlock_v1', OWNER_FAIL_KEY='dd_owner_pin_fail_v1', DIRTY_KEY='dd_cloud_dirty_v25', DIRTY_SEQ_KEY='dd_cloud_dirty_seq_v25';
 const diag=[];
-const ENTRY_CURSOR_KEY='dd_entry_records_cursor_v2', META_CURSOR_KEY='dd_meta_cursor_v1';
+const ENTRY_CURSOR_KEY='dd_entry_records_cursor_v2', META_CURSOR_KEY='dd_meta_cursor_v1', ENTRY_HISTORY_REPAIR_KEY='dd_entry_history_repair_v2600';
 // Ver25.96: 無料枠を守るため、差分確認は20秒間隔。画面復帰時は即時確認し、連続focusは抑制する。
 const RECEIVE_INTERVAL_MS=20000, RECEIVE_IMMEDIATE_THROTTLE_MS=5000;
 function addDiag(step,detail=''){const row={time:new Date().toISOString(),step:String(step),detail:String(detail||'')};diag.push(row);if(diag.length>30)diag.shift();console.log('[DD DIAG]',row);return row}
 function mirrorLongTermStorage(){try{window.DDLongTermStorage?.saveNow?.()}catch(_){}}
-const state={entryCursor:'',metaCursor:'',mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,retryTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,receiveTimer:null,lastReceiveAt:0,receiveBusy:false,applying:false,lastError:'',role:'',accessStatus:'unknown',profiles:[],recoveryProtected:true,dirty:false,dirtySeq:0,pushingSeq:0};
+const state={entryCursor:'',metaCursor:'',mode:'local',status:'起動中…',stage:'boot',user:null,accessToken:'',workspaceId:'',revision:0,syncTimer:null,retryTimer:null,presenceTimer:null,profileTimer:null,accessTimer:null,receiveTimer:null,lastReceiveAt:0,receiveBusy:false,applying:false,lastError:'',role:'',accessStatus:'unknown',historyRepairComplete:false,profiles:[],recoveryProtected:true,dirty:false,dirtySeq:0,pushingSeq:0};
 const publicState=()=>({...state,syncTimer:undefined,retryTimer:undefined,presenceTimer:undefined,profileTimer:undefined,accessTimer:undefined,accessToken:undefined,user:state.user?{id:state.user.id}:null});
 
 function loadDirtyState(){try{state.dirty=localStorage.getItem(DIRTY_KEY)==='1';state.dirtySeq=Number(localStorage.getItem(DIRTY_SEQ_KEY)||0)}catch(_){state.dirty=false;state.dirtySeq=0}}
@@ -48,6 +48,8 @@ async function hydrateDurableCursors(){
  try{durable=await window.DDLongTermStorage?.getSyncCursors?.()||durable}catch(e){addDiag('CURSOR_IDB_READ_FAIL',e?.message||String(e))}
  state.entryCursor=newerCursor(localEntry,durable.entryCursor);
  state.metaCursor=newerCursor(localMeta,durable.metaCursor);
+ state.historyRepairComplete=Boolean(durable.historyRepairV2600);
+ if(state.historyRepairComplete){try{localStorage.setItem(ENTRY_HISTORY_REPAIR_KEY,'complete')}catch(_){}}
  try{if(state.entryCursor)localStorage.setItem(ENTRY_CURSOR_KEY,state.entryCursor);if(state.metaCursor)localStorage.setItem(META_CURSOR_KEY,state.metaCursor)}catch(_){}
  addDiag('CURSOR_READY',`entry=${state.entryCursor||'-'} meta=${state.metaCursor||'-'} durable=${durable.savedAt||'-'}`);
  return {entryCursor:state.entryCursor,metaCursor:state.metaCursor};
@@ -273,7 +275,7 @@ function startAccessPolling(){
     try{localStorage.removeItem(DIRTY_KEY);localStorage.removeItem(DIRTY_SEQ_KEY)}catch(_){}
     setStatus('チェックイン承認済み・差分共有接続','cloud','','delta-ready');
     await bootstrapParentOnceIfNeeded();
-    startPresence();startAutomaticReceive();refreshUI();
+    await repairHistoricalEntryGapOnce();startPresence();startAutomaticReceive();refreshUI();
    }else if(state.accessStatus!==before){emitAccess()}
   }catch(e){console.warn('access polling:',e)}
  },4000);
@@ -324,6 +326,7 @@ async function requestAccess(displayName){
   try{localStorage.removeItem(DIRTY_KEY);localStorage.removeItem(DIRTY_SEQ_KEY)}catch(_){}
   setStatus(state.role==='owner'?'管理者として差分共有へ接続':'承認済み・差分共有へ接続','cloud','','delta-ready');
   await bootstrapParentOnceIfNeeded();
+  await repairHistoricalEntryGapOnce();
   startPresence();startAutomaticReceive();refreshUI();
  }else{
   setStatus(state.accessStatus==='pending'?'管理者の承認待ちです':state.accessStatus==='suspended'?'利用停止中です':'利用できません','cloud','',state.accessStatus);
@@ -635,39 +638,113 @@ async function pullMeta(){
  try{const rows=await rest(`app_meta_state?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&updated_at=gt.${encodeURIComponent(cursor)}&select=payload,updated_at&limit=1`,{timeoutMs:20000});const row=Array.isArray(rows)?rows[0]:null;if(!row?.payload)return {ok:true,updated:false};const localUser=window.db?.currentUser||'';state.applying=true;const merged=mergeSnapshots(row.payload,window.db||{});window.db={...(window.db||{}),...merged,entries:Array.isArray(window.db?.entries)?window.db.entries:[],currentUser:localUser};state.metaCursor=String(row.updated_at||cursor);try{const saved=typeof window.compactDBForStorage==='function'?window.compactDBForStorage(window.db):window.db;localStorage.setItem(window.KEY||'dd_tiktok_app_v14_production',JSON.stringify(saved));localStorage.setItem(META_CURSOR_KEY,state.metaCursor)}catch(_){}state.applying=false;mirrorLongTermStorage();refreshUI();return {ok:true,updated:true}}catch(e){state.applying=false;return {ok:false,reason:e?.message||String(e)}}
 }
 
+function entryPullCursor(cursor,overlapMs=30000){
+ const t=Date.parse(String(cursor||''));
+ if(!Number.isFinite(t))return '1970-01-01T00:00:00.000Z';
+ return new Date(Math.max(0,t-overlapMs)).toISOString();
+}
+function applyEntryRecordRow(row,{preferNewerLocal=false}={}){
+ const id=String(row?.entry_id||'');
+ if(!id)return {changed:false,entryChanged:false,deviceChanged:false};
+ let entryChanged=false,deviceChanged=false;
+ const entries=Array.isArray(window.db?.entries)?window.db.entries:(window.db.entries=[]);
+ const pos=entries.findIndex(e=>String(e?.id||'')===id);
+ if(row.deleted){
+  if(pos>=0){entries.splice(pos,1);entryChanged=true}
+ }else if(row.entry_data&&typeof row.entry_data==='object'){
+  if(pos>=0){
+   const local=entries[pos],remote=row.entry_data;
+   const keepLocal=preferNewerLocal&&recordClock(local)>recordClock(remote);
+   if(!keepLocal&&recordSignature(local)!==recordSignature(remote)){entries[pos]=remote;entryChanged=true}
+  }else{entries.push(row.entry_data);entryChanged=true}
+ }
+ const dev=row.device_data;
+ if(dev&&typeof dev==='object'){
+  const devices=Array.isArray(window.db?.devices)?window.db.devices:(window.db.devices=[]);
+  const did=String(dev.id||'');
+  const dp=devices.findIndex(d=>String(d?.id||'')===did);
+  if(dp>=0){
+   const localDev=devices[dp];
+   const keepLocalDev=preferNewerLocal&&recordClock(localDev)>recordClock(dev);
+   if(!keepLocalDev&&recordSignature(localDev)!==recordSignature(dev)){devices[dp]=dev;deviceChanged=true}
+  }else if(did){devices.push(dev);deviceChanged=true}
+ }
+ return {changed:entryChanged||deviceChanged,entryChanged,deviceChanged};
+}
+
+// Ver26.00: Ver25.98以前の受信カーソル飛びで既にできた「過去の穴」を1回だけ修復する。
+// app_entry_records は entry_id ごとに最新状態を1行保持するため、全件をページング照合しても
+// 入力ルールや共有方式は変えず、端末内に無い/古い入力だけを補える。
+async function repairHistoricalEntryGapOnce(){
+ if(state.accessStatus!=='approved'||!state.workspaceId||document.visibilityState==='hidden')return {ok:false,reason:'not_ready'};
+ if(state.historyRepairComplete)return {ok:true,skipped:true};
+ try{if(localStorage.getItem(ENTRY_HISTORY_REPAIR_KEY)==='complete'){state.historyRepairComplete=true;return {ok:true,skipped:true}}}catch(_){}
+ if(state.receiveBusy||state.applying)return {ok:false,reason:'busy'};
+ const cutoff=new Date().toISOString(),pageSize=500,maxPages=50;
+ let offset=0,total=0,changed=0,maxUpdated=state.entryCursor||'',completed=false;
+ state.receiveBusy=true;
+ setStatus('過去の入力差分を1度だけ照合中…','cloud','','history-repair');
+ try{
+  state.applying=true;
+  for(let page=0;page<maxPages;page++){
+   const rows=await rest(`app_entry_records?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&updated_at=lte.${encodeURIComponent(cutoff)}&select=entry_id,entry_data,device_data,deleted,updated_at&order=updated_at.asc,entry_id.asc&limit=${pageSize}&offset=${offset}`,{timeoutMs:30000});
+   if(!Array.isArray(rows)||!rows.length){completed=true;break;}
+   for(const row of rows){
+    const applied=applyEntryRecordRow(row,{preferNewerLocal:true});
+    if(applied.changed)changed++;
+    maxUpdated=newerCursor(maxUpdated,String(row?.updated_at||''));
+   }
+   total+=rows.length;offset+=rows.length;
+   if(rows.length<pageSize){completed=true;break;}
+  }
+  if(!completed)throw new Error('履歴件数が安全上限を超えました。次回も照合を継続します');
+  if(typeof window.recalculateStoredEntries==='function')window.recalculateStoredEntries(window.db);
+  state.entryCursor=newerCursor(state.entryCursor,maxUpdated);
+  try{const saved=typeof window.compactDBForStorage==='function'?window.compactDBForStorage(window.db):window.db;localStorage.setItem(window.KEY||'dd_tiktok_app_v14_production',JSON.stringify(saved))}catch(_){ }
+  try{if(state.entryCursor)localStorage.setItem(ENTRY_CURSOR_KEY,state.entryCursor)}catch(_){ }
+  state.historyRepairComplete=true;
+  try{localStorage.setItem(ENTRY_HISTORY_REPAIR_KEY,'complete')}catch(_){ }
+  state.applying=false;
+  await window.DDLongTermStorage?.saveNow?.().catch(()=>{});
+  refreshUI();
+  addDiag('HISTORY_REPAIR_COMPLETE',`checked=${total} changed=${changed} cursor=${state.entryCursor||'-'}`);
+  setStatus(changed?`過去差分を修復しました（${changed}件）`:'過去差分の照合完了','cloud','','history-repair-complete');
+  return {ok:true,total,changed};
+ }catch(e){
+  state.applying=false;
+  addDiag('HISTORY_REPAIR_ERROR',e?.message||String(e));
+  setStatus('過去差分の照合を次回再試行します','cloud',e?.message||String(e),'history-repair-error');
+  return {ok:false,reason:e?.message||String(e)};
+ }finally{state.receiveBusy=false}
+}
+
 async function pullEntryRecords(reason='timer'){
  if(state.receiveBusy||state.applying||state.accessStatus!=='approved'||!state.workspaceId||document.visibilityState==='hidden')return {ok:false,reason:'not_ready'};
  const cursor=state.entryCursor||(()=>{try{return localStorage.getItem(ENTRY_CURSOR_KEY)||'1970-01-01T00:00:00.000Z'}catch(_){return '1970-01-01T00:00:00.000Z'}})();
  state.entryCursor=cursor;
+ // Ver26.00: 端末時計の数秒差や同一時刻境界での取りこぼしを避けるため30秒だけ重ねて確認。
+ // entry_idで統合するので重複登録にはならない。
+ const queryCursor=entryPullCursor(cursor,30000);
  state.receiveBusy=true;
  try{
-  const rows=await rest(`app_entry_records?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&updated_at=gt.${encodeURIComponent(cursor)}&select=entry_id,entry_data,device_data,deleted,updated_at&order=updated_at.asc&limit=500`,{timeoutMs:20000});
-  if(!Array.isArray(rows)||!rows.length)return {ok:true,count:0};
+  const rows=await rest(`app_entry_records?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&updated_at=gt.${encodeURIComponent(queryCursor)}&select=entry_id,entry_data,device_data,deleted,updated_at&order=updated_at.asc&limit=500`,{timeoutMs:20000});
+  if(!Array.isArray(rows)||!rows.length)return {ok:true,count:0,changed:0};
   state.applying=true;
+  let changed=0,maxUpdated=state.entryCursor;
   for(const row of rows){
-   const id=String(row?.entry_id||'');
-   if(!id)continue;
-   const pos=(window.db?.entries||[]).findIndex(e=>String(e?.id||'')===id);
-   if(row.deleted){if(pos>=0)window.db.entries.splice(pos,1)}
-   else if(row.entry_data&&typeof row.entry_data==='object'){
-    if(pos>=0)window.db.entries[pos]=row.entry_data;else window.db.entries.push(row.entry_data);
-   }
-   const dev=row.device_data;
-   if(dev&&typeof dev==='object'){
-    const did=String(dev.id||'');
-    const dp=(window.db?.devices||[]).findIndex(d=>String(d?.id||'')===did);
-    if(dp>=0)window.db.devices[dp]=dev;else if(did)window.db.devices.push(dev);
-   }
-   state.entryCursor=String(row.updated_at||state.entryCursor);
+   if(applyEntryRecordRow(row).changed)changed++;
+   maxUpdated=newerCursor(maxUpdated,String(row?.updated_at||''));
   }
-  if(typeof window.recalculateStoredEntries==='function')window.recalculateStoredEntries(window.db);
-  try{const saved=typeof window.compactDBForStorage==='function'?window.compactDBForStorage(window.db):window.db;localStorage.setItem(window.KEY||'dd_tiktok_app_v14_production',JSON.stringify(saved))}catch(_){}
+  state.entryCursor=maxUpdated;
+  if(changed&&typeof window.recalculateStoredEntries==='function')window.recalculateStoredEntries(window.db);
+  if(changed){
+   try{const saved=typeof window.compactDBForStorage==='function'?window.compactDBForStorage(window.db):window.db;localStorage.setItem(window.KEY||'dd_tiktok_app_v14_production',JSON.stringify(saved))}catch(_){}
+  }
   try{localStorage.setItem(ENTRY_CURSOR_KEY,state.entryCursor)}catch(_){}
   state.applying=false;
   mirrorLongTermStorage();
-  refreshUI();
-  setStatus(`入力${rows.length}件を受信しました`,'cloud','','entry-record-received');
-  return {ok:true,count:rows.length};
+  if(changed){refreshUI();setStatus(`入力${changed}件を受信しました`,'cloud','','entry-record-received')}
+  return {ok:true,count:rows.length,changed};
  }catch(e){state.applying=false;addDiag('ENTRY_RECEIVE_ERROR',`${reason}: ${e?.message||e}`);return {ok:false,reason:e?.message||String(e)}}
  finally{state.receiveBusy=false}
 }
@@ -873,7 +950,7 @@ async function inspectConnection(){
   error:String(state.lastError||'')
  };
 }
-window.DDCloud={state,isConfigured:configured,init,bootstrapParentOnceIfNeeded,pull,push,pushEntryById,deleteEntryById,pushMeta,pullMeta,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectAuthIdentity,inspectConnection,inspectTrackedEntry,async syncNow(){const a=await pushMeta();return a},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.99',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,bootstrapParentOnceIfNeeded,pull,push,pushEntryById,deleteEntryById,pushMeta,pullMeta,pullEntryRecords,repairHistoricalEntryGapOnce,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectAuthIdentity,inspectConnection,inspectTrackedEntry,async syncNow(){const a=await pushMeta();return a},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'26.00',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);if(!window.DD_SKIP_AUTO_PUSH&&!state.applying){clearTimeout(state.metaTimer);state.metaTimer=setTimeout(()=>pushMeta().catch(console.warn),500)}return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});

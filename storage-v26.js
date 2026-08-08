@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.99 / storage schema 26 - IndexedDB safety layer
+/* D&D❀TikTok Ver26.00 / storage schema 26 - IndexedDB safety layer
    Existing synchronous localStorage behavior is preserved while a complete,
    asynchronous IndexedDB copy is maintained for recovery and future migration.
 */
@@ -54,16 +54,17 @@
     const source = (typeof compactDBForStorage === 'function') ? compactDBForStorage(db) : db;
     // Ver25.98: iPhoneでlocalStorageが容量上限でも、差分カーソルは
     // DDCloudのメモリ上の最新値からIndexedDBへ直接保存する。
-    let entryCursor=String(window.DDCloud?.state?.entryCursor||''), metaCursor=String(window.DDCloud?.state?.metaCursor||'');
+    let entryCursor=String(window.DDCloud?.state?.entryCursor||''), metaCursor=String(window.DDCloud?.state?.metaCursor||''), historyRepairV2600=Boolean(window.DDCloud?.state?.historyRepairComplete);
     try {
       if (!entryCursor) entryCursor = localStorage.getItem('dd_entry_records_cursor_v2') || '';
       if (!metaCursor) metaCursor = localStorage.getItem('dd_meta_cursor_v1') || '';
+      if (!historyRepairV2600) historyRepairV2600 = localStorage.getItem('dd_entry_history_repair_v2600') === 'complete';
     } catch (_) {}
     return {
       format: 'D&D_TIKTOK_IDB_SNAPSHOT',
       schemaVersion: 26,
       savedAt: new Date().toISOString(),
-      sync: { entryCursor, metaCursor },
+      sync: { entryCursor, metaCursor, historyRepairV2600 },
       data: JSON.parse(JSON.stringify(source))
     };
   }
@@ -150,6 +151,7 @@
       return {
         entryCursor: String(snap?.sync?.entryCursor || ''),
         metaCursor: String(snap?.sync?.metaCursor || ''),
+        historyRepairV2600: Boolean(snap?.sync?.historyRepairV2600),
         savedAt: String(snap?.savedAt || '')
       };
     },
