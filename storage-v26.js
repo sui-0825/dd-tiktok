@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.97 / storage schema 26 - IndexedDB safety layer
+/* D&D❀TikTok Ver25.99 / storage schema 26 - IndexedDB safety layer
    Existing synchronous localStorage behavior is preserved while a complete,
    asynchronous IndexedDB copy is maintained for recovery and future migration.
 */
@@ -52,10 +52,12 @@
 
   function buildPayload() {
     const source = (typeof compactDBForStorage === 'function') ? compactDBForStorage(db) : db;
-    let entryCursor='', metaCursor='';
+    // Ver25.98: iPhoneでlocalStorageが容量上限でも、差分カーソルは
+    // DDCloudのメモリ上の最新値からIndexedDBへ直接保存する。
+    let entryCursor=String(window.DDCloud?.state?.entryCursor||''), metaCursor=String(window.DDCloud?.state?.metaCursor||'');
     try {
-      entryCursor = localStorage.getItem('dd_entry_records_cursor_v2') || '';
-      metaCursor = localStorage.getItem('dd_meta_cursor_v1') || '';
+      if (!entryCursor) entryCursor = localStorage.getItem('dd_entry_records_cursor_v2') || '';
+      if (!metaCursor) metaCursor = localStorage.getItem('dd_meta_cursor_v1') || '';
     } catch (_) {}
     return {
       format: 'D&D_TIKTOK_IDB_SNAPSHOT',
@@ -135,8 +137,22 @@
 
   window.DDLongTermStorage = {
     version: 26,
-    saveNow: () => { queueMirror(0); return writeInFlight; },
+    saveNow: () => {
+      // Ver25.98: 差分カーソル更新直後はsetTimeout待ちにせず、すぐIndexedDBへ確定する。
+      let payload;
+      try { payload = buildPayload(); } catch (e) { return Promise.reject(e); }
+      writeInFlight = writeInFlight.catch(() => {}).then(() => putSnapshot(payload));
+      return writeInFlight;
+    },
     getSnapshot,
+    getSyncCursors: async () => {
+      const snap = await getSnapshot().catch(() => null);
+      return {
+        entryCursor: String(snap?.sync?.entryCursor || ''),
+        metaCursor: String(snap?.sync?.metaCursor || ''),
+        savedAt: String(snap?.savedAt || '')
+      };
+    },
     recoverIfNeeded,
     diagnostics: async () => {
       const snap = await getSnapshot().catch(() => null);
@@ -149,8 +165,12 @@
     }
   };
 
-  // Run immediately; this is intentionally before DOMContentLoaded callbacks.
-  recoverIfNeeded();
+  // Ver25.98: 初回復元の完了をクラウド側が待てるようready Promiseを公開する。
+  // これによりiPhone起動時に「復元」と「差分受信」が競争しない。
+  window.DDLongTermStorage.ready = recoverIfNeeded().catch(e => {
+    console.warn('IndexedDB initial recovery failed', e);
+    return false;
+  });
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') queueMirror(0); });
   window.addEventListener('pagehide', () => queueMirror(0));
 })();

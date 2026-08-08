@@ -1,4 +1,4 @@
-/* D&D❀TikTok Ver25.97 fast local cache + free-plan delta sync */
+/* D&D❀TikTok Ver25.99 multi-device safe durable delta sync */
 (()=>{
 'use strict';
 const cfg=window.DD_BACKEND_CONFIG||{};
@@ -32,6 +32,25 @@ function getDeviceRegistrationId(){
   if(!id){id=(crypto.randomUUID?crypto.randomUUID():`dd-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`);localStorage.setItem(DEVICE_ID_KEY,id)}
   return id;
  }catch(_){return `dd-${Date.now()}-${Math.random().toString(36).slice(2)}`}
+}
+
+function newerCursor(a,b){
+ const aa=String(a||''),bb=String(b||'');
+ if(!aa)return bb;if(!bb)return aa;
+ const at=Date.parse(aa),bt=Date.parse(bb);
+ if(Number.isFinite(at)&&Number.isFinite(bt))return bt>at?bb:aa;
+ return bb>aa?bb:aa;
+}
+async function hydrateDurableCursors(){
+ let localEntry='',localMeta='';
+ try{localEntry=localStorage.getItem(ENTRY_CURSOR_KEY)||'';localMeta=localStorage.getItem(META_CURSOR_KEY)||''}catch(_){}
+ let durable={entryCursor:'',metaCursor:''};
+ try{durable=await window.DDLongTermStorage?.getSyncCursors?.()||durable}catch(e){addDiag('CURSOR_IDB_READ_FAIL',e?.message||String(e))}
+ state.entryCursor=newerCursor(localEntry,durable.entryCursor);
+ state.metaCursor=newerCursor(localMeta,durable.metaCursor);
+ try{if(state.entryCursor)localStorage.setItem(ENTRY_CURSOR_KEY,state.entryCursor);if(state.metaCursor)localStorage.setItem(META_CURSOR_KEY,state.metaCursor)}catch(_){}
+ addDiag('CURSOR_READY',`entry=${state.entryCursor||'-'} meta=${state.metaCursor||'-'} durable=${durable.savedAt||'-'}`);
+ return {entryCursor:state.entryCursor,metaCursor:state.metaCursor};
 }
 function rememberDeviceAccount(){try{if(state.user?.id)localStorage.setItem(DEVICE_ACCOUNT_KEY,state.user.id)}catch(_){}}
 
@@ -570,10 +589,12 @@ async function pushEntryById(entryId){
   const now=new Date().toISOString();
   const body=JSON.stringify({workspace_id:state.workspaceId,entry_id:id,device_id:did||null,entry_data:localEntry,device_data:localDevice,deleted:false,updated_by:state.user.id,updated_at:now});
   const rows=await rest('app_entry_records?on_conflict=workspace_id,entry_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body,timeoutMs:20000});
-  state.entryCursor=String(Array.isArray(rows)&&rows[0]?.updated_at||now);
-  try{localStorage.setItem(ENTRY_CURSOR_KEY,state.entryCursor)}catch(_){}
+  const uploadedAt=String(Array.isArray(rows)&&rows[0]?.updated_at||now);
+  // Ver25.99: 自分の送信時刻で「受信済み位置」を進めない。
+  // まだ受信していない別端末の入力が直前にあっても、次のpullで必ず拾えるようにする。
+  mirrorLongTermStorage();
   setStatus('入力を共有保存しました','cloud','','entry-record-complete');
-  return {ok:true,entryId:id,updatedAt:state.entryCursor};
+  return {ok:true,entryId:id,updatedAt:uploadedAt};
  }catch(e){const message=e?.message||'入力1件の共有保存に失敗しました';setStatus('入力の共有保存に失敗しました','error',message,'entry-record-error');return {ok:false,reason:message}}
 }
 
@@ -584,8 +605,10 @@ async function deleteEntryById(entryId,deviceId=''){
  try{
   const body=JSON.stringify({workspace_id:state.workspaceId,entry_id:id,device_id:String(deviceId||'')||null,entry_data:null,device_data:null,deleted:true,updated_by:state.user.id,updated_at:now});
   const rows=await rest('app_entry_records?on_conflict=workspace_id,entry_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body,timeoutMs:20000});
-  state.entryCursor=String(Array.isArray(rows)&&rows[0]?.updated_at||now);try{localStorage.setItem(ENTRY_CURSOR_KEY,state.entryCursor)}catch(_){}
-  setStatus('削除を共有保存しました','cloud','','entry-delete-complete');return {ok:true,entryId:id};
+  const uploadedAt=String(Array.isArray(rows)&&rows[0]?.updated_at||now);
+  // Ver25.99: 削除送信でも受信カーソルは進めない。別端末の未受信更新を飛ばさないため。
+  mirrorLongTermStorage();
+  setStatus('削除を共有保存しました','cloud','','entry-delete-complete');return {ok:true,entryId:id,updatedAt:uploadedAt};
  }catch(e){const message=e?.message||'削除の共有保存に失敗しました';setStatus('削除の共有保存に失敗しました','error',message,'entry-delete-error');return {ok:false,reason:message}}
 }
 
@@ -602,6 +625,7 @@ async function pushMeta(){
   state.metaCursor=String(Array.isArray(rows)&&rows[0]?.updated_at||now);
   state.applying=true;const localUser=window.db?.currentUser||'';window.db={...(window.db||{}),...payload,entries:Array.isArray(window.db?.entries)?window.db.entries:[],currentUser:localUser};state.applying=false;
   try{const saved=typeof window.compactDBForStorage==='function'?window.compactDBForStorage(window.db):window.db;localStorage.setItem(window.KEY||'dd_tiktok_app_v14_production',JSON.stringify(saved));localStorage.setItem(META_CURSOR_KEY,state.metaCursor)}catch(_){}
+  mirrorLongTermStorage();
   setStatus('端末・招待・設定を共有保存しました','cloud','','meta-complete');return {ok:true};
  }catch(e){state.applying=false;setStatus('共有保存に失敗しました','error',e?.message||String(e),'meta-error');return {ok:false,reason:e?.message||String(e)}}
 }
@@ -705,7 +729,7 @@ async function updateMember(userId,patch){
  if(status==='approved'){allowed.approved_at=new Date().toISOString();allowed.approved_by=state.user.id}
  await rest(`workspace_members?workspace_id=eq.${encodeURIComponent(state.workspaceId)}&user_id=eq.${encodeURIComponent(userId)}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(allowed)});return true
 }
-async function init(){if(!configured()){setStatus('設定不足・端末内保存','local','backend-config.jsの設定不足','config');return}try{setStatus('Supabaseへ接続中…','cloud','','connect');await ensureAuth();await verifyWorkspace();const name=getLocalUserName();if(name)await requestAccess(name);else{setStatus('名前を登録してください','cloud','','name-required');emitAccess()}}catch(e){console.error(e);setStatus(`接続失敗: ${String(e.message||'不明').slice(0,80)}`,'error',e.message,state.stage||'error')}}
+async function init(){if(!configured()){setStatus('設定不足・端末内保存','local','backend-config.jsの設定不足','config');return}try{setStatus('端末内データを確認中…','cloud','','local-recovery');await window.DDLongTermStorage?.ready;await hydrateDurableCursors();setStatus('Supabaseへ接続中…','cloud','','connect');await ensureAuth();await verifyWorkspace();const name=getLocalUserName();if(name)await requestAccess(name);else{setStatus('名前を登録してください','cloud','','name-required');emitAccess()}}catch(e){console.error(e);setStatus(`接続失敗: ${String(e.message||'不明').slice(0,80)}`,'error',e.message,state.stage||'error')}}
 
 async function recoverFromCloud(displayName,pin){
  const name=String(displayName||'').trim();
@@ -849,7 +873,7 @@ async function inspectConnection(){
   error:String(state.lastError||'')
  };
 }
-window.DDCloud={state,isConfigured:configured,init,bootstrapParentOnceIfNeeded,pull,push,pushEntryById,deleteEntryById,pushMeta,pullMeta,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectAuthIdentity,inspectConnection,inspectTrackedEntry,async syncNow(){const a=await pushMeta();return a},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.97',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
+window.DDCloud={state,isConfigured:configured,init,bootstrapParentOnceIfNeeded,pull,push,pushEntryById,deleteEntryById,pushMeta,pullMeta,pullEntryRecords,restoreBackupSnapshot,seedCompanyData,queuePush,requestAccess,recoverFromCloud,getMembership,listMembers,updateMember,listMembersByPin,updateMemberByPin,deleteMemberByPin,renameMemberByPin,restoreCurrentOwnerByPin,getPresenceByName,heartbeat,checkForRemoteUpdates,ownerEmergencyUnlock,inspectAuthIdentity,inspectConnection,inspectTrackedEntry,async syncNow(){const a=await pushMeta();return a},async getCurrentUser(){return state.user},getLastError(){return state.lastError},async refreshMembers(){const n=await pullProfilesSafe();refreshUI();return n},getDiagnostics(){return {version:'25.99',configured:configured(),stage:state.stage,status:state.status,error:state.lastError,workspaceId:state.workspaceId||cfg.workspaceId||'',authenticated:Boolean(state.user&&state.accessToken),userId:state.user?.id||'',role:state.role,accessStatus:state.accessStatus,revision:Number(state.revision||0),dirty:Boolean(state.dirty),endpoint:base?new URL(base).host:'',trace:diag.slice()}},async runCheckinDiagnostics(displayName){diag.length=0;addDiag('DIAG_START',navigator.userAgent);try{await ensureAuth();await verifyWorkspace();const row=await requestAccess(displayName||getLocalUserName());addDiag('DIAG_DONE',JSON.stringify(row||null));return this.getDiagnostics()}catch(e){addDiag('DIAG_ERROR',e.message);setStatus('診断エラー','error',e.message,'diagnostic');throw e}},async importData(payload){if(!payload||typeof payload!=='object')throw new Error('形式が正しくありません');return {ok:true,mode:'preview',records:Object.keys(payload).length}}};
 function hookPersist(){if(typeof window.persist!=='function'||window.persist.__ddCloudHooked)return;const orig=window.persist;const wrapped=function(){const r=orig.apply(this,arguments);if(!window.DD_SKIP_AUTO_PUSH&&!state.applying){clearTimeout(state.metaTimer);state.metaTimer=setTimeout(()=>pushMeta().catch(console.warn),500)}return r};wrapped.__ddCloudHooked=true;window.persist=wrapped}
 window.addEventListener('DOMContentLoaded',()=>{hookPersist();setTimeout(hookPersist,800);setTimeout(init,350)});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&state.accessStatus==='approved'){startAutomaticReceive();heartbeat().catch(console.warn);checkForRemoteUpdates('visible')}else{stopAutomaticReceive()}});
